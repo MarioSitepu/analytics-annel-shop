@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,20 +8,19 @@ datasource db {
 }
 
 model Product {
-  id              String   @id @default(uuid())
+  id              String            @id @default(uuid())
   name            String
   sku             String?
-  costPrice       Float    @default(0)
+  costPrice       Float             @default(0)
   sellingPrice    Float?
-  priceUpdateMode String?  @default("date") // 'date' | 'purchase'
-  createdAt       DateTime @default(now())
-  
-  priceHistory PriceHistory[]
-  locations    ProductLocation[]
-  transfers    ProductTransfer[]
-  additions    ProductAddition[]
-  sales        Sale[]
-  
+  priceUpdateMode String?           @default("date")
+  createdAt       DateTime          @default(now())
+  priceHistory    PriceHistory[]
+  additions       ProductAddition[]
+  locations       ProductLocation[]
+  transfers       ProductTransfer[]
+  sales           Sale[]
+
   @@map("products")
 }
 
@@ -33,42 +29,39 @@ model PriceHistory {
   productId String
   price     Float
   timestamp DateTime
-  type      String   @default("cost") // 'cost' | 'selling'
-  
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
+  type      String   @default("cost")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
   @@index([productId, timestamp])
   @@index([productId, type])
   @@map("price_history")
 }
 
 model Store {
-  id        String   @id @default(uuid())
-  name      String
-  type      String   // 'offline' | 'online'
-  address   String?
-  createdAt DateTime @default(now())
-  
-  locations        ProductLocation[]
-  transfersFrom    ProductTransfer[] @relation("TransferFromStore")
-  transfersTo      ProductTransfer[] @relation("TransferToStore")
-  additions        ProductAddition[]
-  sales            Sale[]
-  uploadHistory    SalesUploadHistory[]
-  
+  id            String               @id @default(uuid())
+  name          String
+  type          String
+  address       String?
+  createdAt     DateTime             @default(now())
+  additions     ProductAddition[]
+  locations     ProductLocation[]
+  transfersFrom ProductTransfer[]    @relation("TransferFromStore")
+  transfersTo   ProductTransfer[]    @relation("TransferToStore")
+  sales         Sale[]
+  uploadHistory SalesUploadHistory[]
+
   @@map("stores")
 }
 
 model ProductLocation {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   productId String
-  location  String   // 'gudang' | 'toko'
-  quantity  Int      @default(0)
+  location  String
+  quantity  Int     @default(0)
   storeId   String?
-  
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  store   Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store     Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
   @@unique([productId, location, storeId], name: "productId_location_storeId")
   @@index([productId])
   @@map("product_locations")
@@ -77,17 +70,16 @@ model ProductLocation {
 model ProductTransfer {
   id           String   @id @default(uuid())
   productId    String
-  fromLocation String   // 'gudang' | 'toko'
-  toLocation   String   // 'gudang' | 'toko'
+  fromLocation String
+  toLocation   String
   fromStoreId  String?
   toStoreId    String?
   quantity     Int
   timestamp    DateTime @default(now())
-  
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  fromStore Store? @relation("TransferFromStore", fields: [fromStoreId], references: [id], onDelete: SetNull)
-  toStore   Store? @relation("TransferToStore", fields: [toStoreId], references: [id], onDelete: SetNull)
-  
+  fromStore    Store?   @relation("TransferFromStore", fields: [fromStoreId], references: [id])
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  toStore      Store?   @relation("TransferToStore", fields: [toStoreId], references: [id])
+
   @@index([productId, timestamp])
   @@map("product_transfers")
 }
@@ -95,14 +87,13 @@ model ProductTransfer {
 model ProductAddition {
   id        String   @id @default(uuid())
   productId String
-  location  String   // 'gudang' | 'toko'
+  location  String
   storeId   String?
   quantity  Int
   timestamp DateTime @default(now())
-  
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  store   Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store     Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
   @@index([productId, timestamp])
   @@map("product_additions")
 }
@@ -115,12 +106,11 @@ model Sale {
   quantity    Int
   price       Float
   total       Float
-  date        String   // Format: "2025-12-05"
+  date        String
   timestamp   DateTime @default(now())
-  
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
   @@index([storeId, date])
   @@index([productId, date])
   @@index([timestamp])
@@ -134,7 +124,7 @@ model UndetectedProduct {
   storeName   String
   rowNumber   Int
   timestamp   DateTime @default(now())
-  
+
   @@map("undetected_products")
 }
 
@@ -147,12 +137,10 @@ model SalesUploadHistory {
   imported  Int      @default(0)
   skipped   Int      @default(0)
   totalRows Int      @default(0)
-  errors    String[] // Array of error messages
+  errors    String[]
   timestamp DateTime @default(now())
-  
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
   @@index([storeId, timestamp])
   @@map("sales_upload_history")
 }
-

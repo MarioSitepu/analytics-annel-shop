@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProducts, addProduct, updateProduct, getProduct } from '@/lib/storage';
+import { getProducts, addProduct, updateProduct, getProduct, addCostPriceHistory } from '@/lib/storage';
 import { Product, PriceHistory } from '@/types';
 
 export async function GET(request: NextRequest) {
@@ -21,21 +21,42 @@ export async function POST(request: NextRequest) {
     }
 
     const initialCostPrice = initialPrice ? parseFloat(initialPrice) : 0;
-    const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const now = new Date();
+    const timestamp = now.toISOString();
     
     const product: Product = {
       id: `prod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name,
       sku: sku || '',
       costPrice: initialCostPrice,
-      costHistory: initialCostPrice > 0 ? [{ price: initialCostPrice, timestamp }] : [],
-      createdAt: new Date().toISOString(),
+      costHistory: [],
+      createdAt: now.toISOString(),
     };
 
+    // Create product first
     await addProduct(product);
-    return NextResponse.json({ success: true, data: product });
+    
+    // Add cost price history if initial price provided
+    if (initialCostPrice > 0) {
+      try {
+        await addCostPriceHistory(product.id, initialCostPrice, timestamp);
+      } catch (err) {
+        console.error('Error adding cost price history:', err);
+        // Continue even if history fails - product already created
+      }
+    }
+    
+    // Fetch the created product with relations
+    const createdProduct = await getProduct(product.id);
+    
+    return NextResponse.json({ success: true, data: createdProduct || product });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Failed to create product' }, { status: 500 });
+    console.error('Error creating product:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create product';
+    return NextResponse.json({ 
+      success: false, 
+      error: errorMessage 
+    }, { status: 500 });
   }
 }
 

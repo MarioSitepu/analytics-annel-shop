@@ -56,17 +56,24 @@ export default function ProductsPage() {
       const response = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: formData.name, initialPrice: formData.initialPrice }),
+        body: JSON.stringify({ name: formData.name, sku: formData.sku, initialPrice: formData.initialPrice }),
       });
       const result = await response.json();
       if (result.success) {
+        setNotification({ type: 'success', message: 'Produk berhasil ditambahkan' });
+        setTimeout(() => setNotification(null), 3000);
         setShowAddModal(false);
         setFormData({ name: '', sku: '', initialPrice: '' });
         fetchProducts();
         fetchHistory();
+      } else {
+        setNotification({ type: 'error', message: result.error || 'Gagal menambahkan produk' });
+        setTimeout(() => setNotification(null), 3000);
       }
     } catch (error) {
       console.error('Error adding product:', error);
+      setNotification({ type: 'error', message: 'Terjadi kesalahan saat menambahkan produk' });
+      setTimeout(() => setNotification(null), 3000);
     }
   };
 
