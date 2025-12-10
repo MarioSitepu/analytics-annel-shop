@@ -4,64 +4,63 @@ import { addProductAddition, updateProductLocation, getProductLocations, getProd
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { productId, location, storeId, quantity, costPrice, date } = body;
+    const { productId, location, storeId, quantity, costPrice } = body;
 
-    if (!productId || !location || !quantity) {
+    if (!productId || !location || quantity === undefined || quantity === null) {
       return NextResponse.json({ success: false, error: 'Product ID, location, and quantity are required' }, { status: 400 });
+    }
+
+    // Parse quantity to number
+    const quantityNum = typeof quantity === 'string' ? parseFloat(quantity) : quantity;
+    if (isNaN(quantityNum) || quantityNum <= 0) {
+      return NextResponse.json({ success: false, error: 'Quantity must be a positive number' }, { status: 400 });
     }
 
     if (location !== 'gudang' && location !== 'toko') {
       return NextResponse.json({ success: false, error: 'Location must be gudang or toko' }, { status: 400 });
     }
 
-    // Update location quantity
-    const locations = await getProductLocations();
-    const existingLocation = locations.find(
-      l => l.productId === productId && l.location === location && l.storeId === storeId
-    );
-    const newQuantity = existingLocation ? existingLocation.quantity + quantity : quantity;
-    await updateProductLocation(productId, location, storeId, newQuantity);
+    // Convert undefined to null for database consistency
+    const finalStoreId = storeId || null;
 
-    // Record addition - use custom date if provided (for gudang), otherwise use current time
-    let finalTimestamp: string;
-    if (date) {
-      // Parse date format: dd/mm/yyyy or yyyy-mm-dd
-      let parsedDate: Date;
-      
-      if (date.includes('/')) {
-        // Format: dd/mm/yyyy
-        const [day, month, year] = date.split('/');
-        parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-      } else {
-        // Format: yyyy-mm-dd
-        parsedDate = new Date(date);
-      }
-      
-      if (isNaN(parsedDate.getTime())) {
-        return NextResponse.json({ success: false, error: 'Format tanggal tidak valid' }, { status: 400 });
-      }
-      
-      const now = new Date();
-      now.setHours(23, 59, 59, 999); // Set to end of today for comparison
-      
-      // Validasi: tidak boleh lebih dari hari ini
-      if (parsedDate > now) {
-        return NextResponse.json({ success: false, error: 'Tidak bisa menambahkan stok untuk tanggal yang belum dimulai' }, { status: 400 });
-      }
-      
-      // Set time to start of day (00:00:00)
-      parsedDate.setHours(0, 0, 0, 0);
-      finalTimestamp = parsedDate.toISOString();
-    } else {
-      finalTimestamp = new Date().toISOString();
-    }
+    // Update location quantity - get current stock first
+    const locations = await getProductLocations();
+    // Handle both null and undefined for storeId matching
+    const existingLocation = locations.find(
+      l => l.productId === productId && 
+           l.location === location && 
+           ((l.storeId === finalStoreId) || 
+            (l.storeId === null && finalStoreId === null) ||
+            (l.storeId === undefined && finalStoreId === null))
+    );
+    
+    const currentQuantity = existingLocation?.quantity || 0;
+    const newQuantity = currentQuantity + quantityNum;
+    
+    console.log('Updating product location:', {
+      productId,
+      location,
+      storeId: finalStoreId,
+      currentQuantity,
+      quantityToAdd: quantityNum,
+      newQuantity,
+      existingLocation: existingLocation ? { id: existingLocation.productId, quantity: existingLocation.quantity, storeId: existingLocation.storeId } : null,
+      allMatchingLocations: locations.filter(l => l.productId === productId && l.location === location)
+    });
+    
+    await updateProductLocation(productId, location, finalStoreId === null ? undefined : finalStoreId, newQuantity);
+    
+    console.log('Product location updated successfully');
+
+    // Record addition - always use current time
+    const finalTimestamp = new Date().toISOString();
     
     const addition = {
       id: `addition_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       productId,
       location,
-      storeId,
-      quantity,
+      storeId: finalStoreId === null ? undefined : finalStoreId, // Convert null back to undefined for type consistency
+      quantity: quantityNum,
       timestamp: finalTimestamp,
     };
 

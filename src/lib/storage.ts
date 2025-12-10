@@ -33,7 +33,7 @@ const mapProductLocation = (l: any): ProductLocation => ({
   productId: l.productId,
   location: l.location as 'gudang' | 'toko',
   quantity: l.quantity,
-  storeId: l.storeId || undefined,
+  storeId: l.storeId === null ? undefined : l.storeId, // Preserve null as undefined for type consistency, but handle null explicitly
 });
 
 const mapProductTransfer = (t: any): ProductTransfer => ({
@@ -240,24 +240,35 @@ export const updateProductLocation = async (
   storeId: string | undefined,
   quantity: number
 ): Promise<void> => {
-  await prisma.productLocation.upsert({
+  // Convert undefined to null for database
+  const finalStoreId = storeId || null;
+  
+  // Find existing location
+  const existing = await prisma.productLocation.findFirst({
     where: {
-      productId_location_storeId: {
-        productId,
-        location,
-        storeId: storeId || null,
-      } as any,
-    },
-    update: {
-      quantity,
-    },
-    create: {
       productId,
       location,
-      storeId,
-      quantity,
+      storeId: finalStoreId,
     },
   });
+  
+  if (existing) {
+    // Update existing
+    await prisma.productLocation.update({
+      where: { id: existing.id },
+      data: { quantity },
+    });
+  } else {
+    // Create new
+    await prisma.productLocation.create({
+      data: {
+        productId,
+        location,
+        storeId: finalStoreId,
+        quantity,
+      },
+    });
+  }
 };
 
 // Product Transfers
@@ -329,7 +340,7 @@ export const addProductAddition = async (addition: ProductAddition): Promise<voi
       id: addition.id,
       productId: addition.productId,
       location: addition.location,
-      storeId: addition.storeId,
+      storeId: addition.storeId || null, // Convert undefined to null for database
       quantity: addition.quantity,
       timestamp: new Date(addition.timestamp),
     },

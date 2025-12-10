@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Package, Upload, Store, Menu, X, LogOut, User } from 'lucide-react';
+import { LayoutDashboard, Package, Upload, Store, Menu, X, LogOut, User, Database } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/products', label: 'Kelola Produk', icon: Package },
   { href: '/products/add', label: 'Tambah Produk', icon: Package },
+  { href: '/database-barang', label: 'Database Barang', icon: Database },
   { href: '/upload-sales', label: 'Upload Penjualan', icon: Upload },
   { href: '/add-store', label: 'Tambah Toko', icon: Store },
 ];

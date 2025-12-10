@@ -66,6 +66,7 @@ export interface DashboardData {
   totalSales: number;
   totalProfit: number;
   salesCount: number;
+  totalQuantity: number; // Total jumlah produk yang terjual (sum of all quantities from CSV)
   salesByProduct: { productName: string; quantity: number; revenue: number }[];
   salesByStore: { storeName: string; revenue: number }[];
 }

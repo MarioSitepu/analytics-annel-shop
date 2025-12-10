@@ -13,10 +13,8 @@ interface EnrichedAddition extends ProductAddition {
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState({ name: '', sku: '', initialPrice: '' });
   const [priceData, setPriceData] = useState({ price: '', timestamp: '', updateMode: 'date' as 'date' | 'purchase' });
   const [additions, setAdditions] = useState<EnrichedAddition[]>([]);
   const [undetected, setUndetected] = useState<UndetectedProduct[]>([]);
@@ -50,32 +48,6 @@ export default function ProductsPage() {
     }
   };
 
-  const handleAddProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await fetch('/api/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: formData.name, sku: formData.sku, initialPrice: formData.initialPrice }),
-      });
-      const result = await response.json();
-      if (result.success) {
-        setNotification({ type: 'success', message: 'Produk berhasil ditambahkan' });
-        setTimeout(() => setNotification(null), 3000);
-        setShowAddModal(false);
-        setFormData({ name: '', sku: '', initialPrice: '' });
-        fetchProducts();
-        fetchHistory();
-      } else {
-        setNotification({ type: 'error', message: result.error || 'Gagal menambahkan produk' });
-        setTimeout(() => setNotification(null), 3000);
-      }
-    } catch (error) {
-      console.error('Error adding product:', error);
-      setNotification({ type: 'error', message: 'Terjadi kesalahan saat menambahkan produk' });
-      setTimeout(() => setNotification(null), 3000);
-    }
-  };
 
   const handleUpdatePrice = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -230,13 +202,6 @@ export default function ProductsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Kelola Produk</h1>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          <Plus className="h-5 w-5" />
-          Tambah Produk
-        </button>
       </div>
 
       {loading ? (
@@ -322,57 +287,6 @@ export default function ProductsPage() {
               )}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Add Product Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl border border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Tambah Produk</h2>
-            <form onSubmit={handleAddProduct} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nama Produk *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Harga Modal *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={formData.initialPrice}
-                  onChange={(e) => setFormData({ ...formData, initialPrice: e.target.value })}
-                  className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Simpan
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
       )}
 
@@ -619,7 +533,7 @@ export default function ProductsPage() {
       {showAddFromUndetectedModal && selectedUndetected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl border border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Tambah Produk</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Tambah Stok Produk</h2>
             <p className="text-sm text-gray-600 mb-4">
               Produk <strong>{selectedUndetected.productName}</strong> akan ditambahkan dengan harga modal 0 sebagai set awal.
             </p>

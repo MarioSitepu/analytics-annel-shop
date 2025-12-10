@@ -13,7 +13,13 @@ export default function UploadSalesTypePage() {
   const [selectedStoreId, setSelectedStoreId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string; errors?: string[] } | null>(null);
+  const [uploadResult, setUploadResult] = useState<{ 
+    success: boolean; 
+    message: string; 
+    errors?: string[];
+    stockRecommendations?: Array<{ productName: string; recommendedStock: number; message: string }>;
+    dataMessage?: string;
+  } | null>(null);
   const [uploadHistory, setUploadHistory] = useState<SalesUploadHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -116,10 +122,16 @@ export default function UploadSalesTypePage() {
 
       const result = await response.json();
       if (result.success) {
+        const message = result.data.imported > 0
+          ? `Berhasil mengupload ${result.data.imported} data penjualan dari ${result.data.totalRows} baris`
+          : result.data.message || `Tidak ada data yang berhasil diupload dari ${result.data.totalRows} baris`;
+        
         setUploadResult({
-          success: true,
-          message: `Berhasil mengupload ${result.data.imported} data penjualan`,
+          success: result.data.imported > 0,
+          message,
           errors: result.data.errors,
+          stockRecommendations: result.data.stockRecommendations,
+          dataMessage: result.data.message,
         });
         setFile(null);
         // Reset file input
@@ -255,15 +267,33 @@ export default function UploadSalesTypePage() {
                   >
                     {uploadResult.message}
                   </p>
+                  {uploadResult.dataMessage && (
+                    <div className="mt-2 rounded-lg bg-yellow-50 border border-yellow-200 p-3">
+                      <p className="text-sm font-medium text-yellow-800">{uploadResult.dataMessage}</p>
+                    </div>
+                  )}
+                  {uploadResult.stockRecommendations && uploadResult.stockRecommendations.length > 0 && (
+                    <div className="mt-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
+                      <p className="text-xs font-medium text-blue-800 mb-2">📋 Produk yang perlu ditambahkan stok:</p>
+                      <ul className="list-disc list-inside text-xs text-blue-700 space-y-1">
+                        {uploadResult.stockRecommendations.map((rec, index) => (
+                          <li key={index}>{rec.message}</li>
+                        ))}
+                      </ul>
+                      <p className="text-xs text-blue-600 mt-2">
+                        💡 Buka menu <strong>"Tambah Stok Produk"</strong> di halaman produk untuk menambahkan stok.
+                      </p>
+                    </div>
+                  )}
                   {uploadResult.errors && uploadResult.errors.length > 0 && (
                     <div className="mt-2">
                       <p className="text-xs font-medium text-yellow-800 mb-1">Peringatan:</p>
-                      <ul className="list-disc list-inside text-xs text-yellow-700 space-y-1">
-                        {uploadResult.errors.slice(0, 5).map((error, index) => (
+                      <ul className="list-disc list-inside text-xs text-yellow-700 space-y-1 max-h-40 overflow-y-auto">
+                        {uploadResult.errors.slice(0, 10).map((error, index) => (
                           <li key={index}>{error}</li>
                         ))}
-                        {uploadResult.errors.length > 5 && (
-                          <li>... dan {uploadResult.errors.length - 5} peringatan lainnya</li>
+                        {uploadResult.errors.length > 10 && (
+                          <li>... dan {uploadResult.errors.length - 10} peringatan lainnya</li>
                         )}
                       </ul>
                     </div>

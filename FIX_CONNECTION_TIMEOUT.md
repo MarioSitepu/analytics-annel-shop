@@ -1,115 +1,111 @@
-# Fix Connection Timeout ke Supabase
+# Fix: Connection Timeout ke Supabase
 
-## Masalah
+## Error
 
 ```
-Error: P1001 - Can't reach database server
-Connection timed out
+Can't reach database server at `aws-1-ap-southeast-1.pooler.supabase.com:5432`
 ```
 
 ## Penyebab
 
-1. **Direct connection** ke Supabase sering timeout dari beberapa network
-2. Firewall/network blocking port 5432
-3. Supabase membatasi direct connections
+Connection Pooling port 5432 (Transaction mode) mungkin tidak bisa diakses dari network Anda atau ada masalah dengan connection string.
 
-## Solusi: Gunakan Connection Pooling
+## Solusi
 
-Connection Pooling lebih reliable dan direkomendasikan oleh Supabase.
+### Opsi 1: Gunakan Port 6543 (Session Mode) - Recommended
 
-### Langkah 1: Dapatkan Connection Pooling URL
+Port 6543 adalah Session mode yang lebih reliable untuk development.
 
-1. Buka [Supabase Dashboard](https://supabase.com/dashboard)
-2. Pilih project Anda
-3. Klik **Settings** (⚙️)
-4. Pilih **Database** di sidebar
-5. Scroll ke **Connection Pooling**
-6. Pilih tab **Transaction** mode
-7. Copy connection string
-
-**Format:**
-```
-postgresql://postgres.xxxxx:[PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
-```
-
-### Langkah 2: Update .env
-
-Edit file `.env` dan update `DATABASE_URL`:
-
+**Update `.env`:**
 ```env
-DATABASE_URL="postgresql://postgres.xxxxx:[PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+DATABASE_URL="postgresql://postgres.yfomjrygtrohfrtrdvrr:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
 ```
 
-**Ganti:**
-- `xxxxx` → ID project Supabase Anda
-- `[PASSWORD]` → Password database Anda
-- `ap-southeast-1` → Region Anda (sesuaikan)
+**Restart dev server:**
+```powershell
+# Stop server (Ctrl+C)
+npm run dev
+```
 
-### Langkah 3: Test Connection
+### Opsi 2: Coba Direct Connection (Jika Pooling Gagal)
+
+Jika connection pooling masih timeout, coba direct connection:
+
+**Update `.env`:**
+```env
+DATABASE_URL="postgresql://postgres:[PASSWORD]@db.yfomjrygtrohfrtrdvrr.supabase.co:5432/postgres"
+```
+
+**Catatan:** Direct connection mungkin juga timeout jika ada firewall issue.
+
+### Opsi 3: Check Connection String
+
+Pastikan:
+1. ✅ Password benar
+2. ✅ Connection string lengkap
+3. ✅ Tidak ada karakter khusus yang perlu di-escape
+4. ✅ Format connection string benar
+
+## Format Connection String
+
+**Connection Pooling (Port 6543 - Session Mode):**
+```
+postgresql://postgres.yfomjrygtrohfrtrdvrr:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres
+```
+
+**Connection Pooling (Port 5432 - Transaction Mode):**
+```
+postgresql://postgres.yfomjrygtrohfrtrdvrr:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
+```
+
+**Direct Connection:**
+```
+postgresql://postgres:[PASSWORD]@db.yfomjrygtrohfrtrdvrr.supabase.co:5432/postgres
+```
+
+## Troubleshooting
+
+### 1. Test Connection
 
 ```powershell
 npx prisma db pull
 ```
 
-### Langkah 4: Push Schema
+Jika berhasil, connection OK. Jika gagal, coba opsi lain.
 
+### 2. Check Supabase Dashboard
+
+1. Buka Supabase Dashboard
+2. Settings > Database > Connection Pooling
+3. Copy connection string yang benar
+4. Pastikan password benar
+
+### 3. Check Network/Firewall
+
+- Pastikan tidak ada firewall yang block connection
+- Coba dari network lain jika mungkin
+- Check apakah Supabase project masih aktif
+
+### 4. Restart Dev Server
+
+Setelah update `.env`, selalu restart dev server:
 ```powershell
-npx prisma db push
+# Stop (Ctrl+C)
+npm run dev
 ```
 
-## Alternatif: Menggunakan Script
+## Rekomendasi
 
-Jalankan script helper:
+**Untuk Development:**
+- Gunakan port 6543 (Session mode) - lebih reliable
+- Connection pooling lebih baik untuk development
 
-```powershell
-.\setup-supabase-connection.ps1
-```
+**Untuk Production:**
+- Gunakan connection pooling
+- Port 5432 atau 6543 tergantung kebutuhan
 
-Script akan meminta connection pooling URL dan otomatis:
-- Update `.env`
-- Test connection
-- Push schema
+## Catatan
 
-## Perbedaan Connection Types
-
-### Direct Connection (Port 5432)
-- ❌ Sering timeout
-- ❌ Tidak recommended untuk production
-- ✅ Bisa digunakan jika network mendukung
-
-### Connection Pooling (Port 5432 atau 6543)
-- ✅ Lebih reliable
-- ✅ Recommended untuk production
-- ✅ Better performance
-- ✅ Handles connection limits
-
-## Troubleshooting
-
-**Masih timeout dengan Connection Pooling?**
-- Pastikan password benar
-- Pastikan connection string lengkap
-- Coba port 6543 (Session mode) atau 5432 (Transaction mode)
-- Check firewall settings
-- Coba dari network lain
-
-**Password dengan karakter khusus?**
-- Gunakan URL encoding
-- Atau reset password ke yang lebih sederhana
-
-**Region berbeda?**
-- Pastikan region di connection string sesuai dengan project
-- Format: `aws-0-[REGION].pooler.supabase.com`
-
-## Quick Fix
-
-1. Supabase Dashboard → Settings → Database → Connection Pooling
-2. Copy Transaction mode connection string
-3. Update `.env` dengan connection string tersebut
-4. Test: `npx prisma db pull`
-5. Push: `npx prisma db push`
-
-## Reference
-
-- [Supabase Connection Pooling](https://supabase.com/docs/guides/database/connecting-to-postgres#connection-pooler)
-- [Prisma + Supabase](https://supabase.com/docs/guides/integrations/prisma)
-
+- Connection pooling port 5432 (Transaction mode) mungkin tidak support semua operations
+- Port 6543 (Session mode) lebih kompatibel untuk development
+- Direct connection mungkin timeout karena firewall/network issue

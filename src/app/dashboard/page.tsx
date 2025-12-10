@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { Calendar, TrendingUp, DollarSign, ShoppingCart } from 'lucide-react';
+import { TrendingUp, DollarSign, ShoppingCart } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface DashboardData {
   totalSales: number;
   totalProfit: number;
   salesCount: number;
+  totalQuantity: number; // Total jumlah produk yang terjual (sum of all quantities)
   salesByProduct: { productName: string; quantity: number; revenue: number }[];
   salesByStore: { storeName: string; revenue: number }[];
 }
@@ -16,18 +16,17 @@ interface DashboardData {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 export default function Dashboard() {
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
-  }, [selectedDate]);
+  }, []);
 
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/dashboard?date=${selectedDate}`);
+      const response = await fetch('/api/dashboard');
       const result = await response.json();
       if (result.success) {
         setDashboardData(result.data);
@@ -43,18 +42,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <Calendar className="h-5 w-5" />
-            Pilih Tanggal:
-          </label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-          />
-        </div>
+        <p className="text-sm text-gray-600">Total semua data penjualan</p>
       </div>
 
       {loading ? (
@@ -110,9 +98,9 @@ export default function Dashboard() {
             <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Produk Terjual</p>
+                  <p className="text-sm font-medium text-gray-600">Total Produk Terjual</p>
                   <p className="mt-2 text-2xl font-bold text-gray-900">
-                    {dashboardData.salesByProduct.length}
+                    {dashboardData.totalQuantity || 0}
                   </p>
                 </div>
                 <div className="rounded-full bg-orange-100 p-3">
@@ -126,14 +114,23 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Sales by Product */}
             <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Penjualan per Produk</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Penjualan per Produk (Pendapatan)</h2>
               {dashboardData.salesByProduct.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={dashboardData.salesByProduct}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="productName" angle={-45} textAnchor="end" height={100} />
+                    <XAxis 
+                      dataKey="productName" 
+                      angle={-45} 
+                      textAnchor="end" 
+                      height={100}
+                      tick={{ fontSize: 12 }}
+                    />
                     <YAxis />
-                    <Tooltip formatter={(value: number) => `Rp ${value.toLocaleString('id-ID')}`} />
+                    <Tooltip 
+                      formatter={(value: number) => `Rp ${value.toLocaleString('id-ID')}`}
+                      labelStyle={{ color: '#374151' }}
+                    />
                     <Legend />
                     <Bar dataKey="revenue" fill="#0088FE" name="Pendapatan" />
                   </BarChart>
@@ -176,6 +173,32 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Quantity Chart */}
+          {dashboardData.salesByProduct.length > 0 && (
+            <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Jumlah Terjual per Produk</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={dashboardData.salesByProduct}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="productName" 
+                    angle={-45} 
+                    textAnchor="end" 
+                    height={100}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis />
+                  <Tooltip 
+                    formatter={(value: number) => `${value} unit`}
+                    labelStyle={{ color: '#374151' }}
+                  />
+                  <Legend />
+                  <Bar dataKey="quantity" fill="#00C49F" name="Jumlah Terjual" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
           {/* Product Sales Table */}
           {dashboardData.salesByProduct.length > 0 && (
             <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
@@ -185,27 +208,41 @@ export default function Dashboard() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        No
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Produk
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Jumlah
+                        Jumlah Terjual
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Pendapatan
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Rata-rata per Unit
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {dashboardData.salesByProduct.map((item, index) => (
-                      <tr key={index}>
+                    {dashboardData.salesByProduct
+                      .sort((a, b) => b.revenue - a.revenue) // Sort by revenue descending
+                      .map((item, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {index + 1}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {item.productName}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {item.quantity}
+                          {item.quantity} unit
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                          Rp {item.revenue.toLocaleString('id-ID')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          Rp {item.revenue.toLocaleString('id-ID')}
+                          Rp {item.quantity > 0 ? (item.revenue / item.quantity).toLocaleString('id-ID', { maximumFractionDigits: 0 }) : '0'}
                         </td>
                       </tr>
                     ))}
@@ -214,10 +251,62 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          {/* Store Sales Table */}
+          {dashboardData.salesByStore.length > 0 && (
+            <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Detail Penjualan per Toko</h2>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        No
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Nama Toko
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Pendapatan
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Persentase
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {dashboardData.salesByStore
+                      .sort((a, b) => b.revenue - a.revenue) // Sort by revenue descending
+                      .map((item, index) => {
+                        const percentage = dashboardData.totalSales > 0 
+                          ? ((item.revenue / dashboardData.totalSales) * 100).toFixed(1)
+                          : '0';
+                        return (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {index + 1}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {item.storeName}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                              Rp {item.revenue.toLocaleString('id-ID')}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {percentage}%
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <div className="rounded-lg bg-white p-12 text-center shadow-sm border border-gray-200">
-          <p className="text-gray-500">Tidak ada data untuk tanggal yang dipilih</p>
+          <p className="text-gray-500">Tidak ada data penjualan</p>
         </div>
       )}
     </div>

@@ -4,60 +4,125 @@ import { DashboardData } from '@/types';
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const date = searchParams.get('date');
-
-    if (!date) {
-      return NextResponse.json({ success: false, error: 'Date parameter is required' }, { status: 400 });
-    }
-
     const sales = await getSales();
     const products = await getProducts();
     const stores = await getStores();
 
-    // Filter sales by date
-    const filteredSales = sales.filter(sale => sale.date === date);
+    // Tidak ada filter tanggal - ambil semua sales yang berhasil diimport
+    const filteredSales = sales;
 
-    // Calculate totals
-    const totalSales = filteredSales.reduce((sum, sale) => sum + sale.total, 0);
+    // Group sales by product untuk menghitung dengan rumus yang sama dengan database produk
+    const salesByProductMap = new Map<string, { 
+      productId: string;
+      quantity: number; 
+      sales: typeof filteredSales;
+    }>();
     
-    // Calculate profit: Revenue (selling price) - Cost (cost price)
-    const totalProfit = await Promise.all(
-      filteredSales.map(async (sale) => {
-        const product = products.find(p => p.id === sale.productId);
-        if (!product) return 0;
-        
-        // Get cost price at the time of sale
-        const costPrice = await getCostPriceAtTime(product, sale.timestamp);
-        const totalCost = costPrice * sale.quantity;
-        
-        // Profit = Revenue (sale.total) - Cost (costPrice * quantity)
-        return sale.total - totalCost;
-      })
-    ).then(results => results.reduce((sum, profit) => sum + profit, 0));
-
-    // Sales by product
-    const salesByProductMap = new Map<string, { quantity: number; revenue: number }>();
     filteredSales.forEach(sale => {
-      const existing = salesByProductMap.get(sale.productName) || { quantity: 0, revenue: 0 };
+      const existing = salesByProductMap.get(sale.productName) || { 
+        productId: sale.productId,
+        quantity: 0, 
+        sales: [] 
+      };
       existing.quantity += sale.quantity;
-      existing.revenue += sale.total;
+      existing.sales.push(sale);
       salesByProductMap.set(sale.productName, existing);
     });
 
-    const salesByProduct = Array.from(salesByProductMap.entries()).map(([productName, data]) => ({
-      productName,
-      ...data,
-    }));
+    // Calculate totals menggunakan rumus yang sama dengan database produk
+    // Total Pendapatan = Σ(Harga Jual Terbaru per Product × Jumlah Terjual per Product)
+    // Total Keuntungan = Σ(Total Pendapatan per Product - (Harga Modal × Jumlah Terjual per Product))
+    let totalSales = 0;
+    let totalProfit = 0;
 
-    // Sales by store
+    for (const [productName, productData] of salesByProductMap.entries()) {
+      const product = products.find(p => p.id === productData.productId);
+      if (!product) continue;
+
+      // Get latest selling price for this product
+      let sellingPrice: number | undefined = undefined;
+      if (productData.sales.length > 0) {
+        const sortedSales = [...productData.sales].sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        sellingPrice = sortedSales[0].price;
+      }
+
+      // Calculate revenue: Harga Jual Terbaru × Jumlah Terjual
+      const productRevenue = sellingPrice && productData.quantity > 0
+        ? Math.round((sellingPrice * productData.quantity) * 100) / 100
+        : 0;
+
+      // Calculate profit: Total Pendapatan - (Harga Modal × Jumlah Terjual)
+      const productCost = product.costPrice * productData.quantity;
+      const productProfit = Math.round((productRevenue - productCost) * 100) / 100;
+
+      totalSales += productRevenue;
+      totalProfit += productProfit;
+    }
+
+    // Jumlah transaksi = jumlah sales records (setiap sale adalah 1 transaksi)
+    const salesCount = filteredSales.length;
+
+    // Jumlah total produk = sum dari semua quantity yang terjual dari CSV
+    const totalQuantity = filteredSales.reduce((sum, sale) => sum + sale.quantity, 0);
+
+    // Sales by product (untuk display)
+    const salesByProduct = Array.from(salesByProductMap.entries()).map(([productName, productData]) => {
+      const product = products.find(p => p.id === productData.productId);
+      if (!product) {
+        return { productName, quantity: productData.quantity, revenue: 0 };
+      }
+
+      // Get latest selling price
+      let sellingPrice: number | undefined = undefined;
+      if (productData.sales.length > 0) {
+        const sortedSales = [...productData.sales].sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        sellingPrice = sortedSales[0].price;
+      }
+
+      // Calculate revenue using same formula
+      const revenue = sellingPrice && productData.quantity > 0
+        ? Math.round((sellingPrice * productData.quantity) * 100) / 100
+        : 0;
+
+      return {
+        productName,
+        quantity: productData.quantity,
+        revenue,
+      };
+    });
+
+    // Sales by store (untuk display)
+    // Group by store, then calculate using same formula per product
     const salesByStoreMap = new Map<string, number>();
-    filteredSales.forEach(sale => {
+    
+    for (const sale of filteredSales) {
       const store = stores.find(s => s.id === sale.storeId);
       const storeName = store?.name || 'Unknown';
+      
+      // Get product to find latest selling price
+      const product = products.find(p => p.id === sale.productId);
+      if (!product) continue;
+
+      // Get all sales for this product to find latest selling price
+      const productSales = filteredSales.filter(s => s.productId === sale.productId);
+      let sellingPrice: number | undefined = undefined;
+      if (productSales.length > 0) {
+        const sortedSales = [...productSales].sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        sellingPrice = sortedSales[0].price;
+      }
+
+      // Calculate revenue for this sale using latest selling price
+      const saleRevenue = sellingPrice ? Math.round((sellingPrice * sale.quantity) * 100) / 100 : 0;
+      
       const existing = salesByStoreMap.get(storeName) || 0;
-      salesByStoreMap.set(storeName, existing + sale.total);
-    });
+      salesByStoreMap.set(storeName, existing + saleRevenue);
+    }
 
     const salesByStore = Array.from(salesByStoreMap.entries()).map(([storeName, revenue]) => ({
       storeName,
@@ -67,7 +132,8 @@ export async function GET(request: NextRequest) {
     const dashboardData: DashboardData = {
       totalSales,
       totalProfit,
-      salesCount: filteredSales.length,
+      salesCount,
+      totalQuantity,
       salesByProduct,
       salesByStore,
     };
