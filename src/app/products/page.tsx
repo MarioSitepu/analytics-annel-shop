@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, DollarSign, History, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { Plus, DollarSign, History, AlertCircle, CheckCircle, X, TrendingUp, BarChart3 } from 'lucide-react';
 import { Product, PriceHistory, ProductAddition, UndetectedProduct } from '@/types';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 
 interface EnrichedAddition extends ProductAddition {
   productName: string;
@@ -13,7 +14,6 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({ name: '', sku: '', initialPrice: '' });
@@ -26,6 +26,9 @@ export default function ProductsPage() {
   const [priceUpdateMode, setPriceUpdateMode] = useState<'date' | 'purchase'>('date');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [updatingPrice, setUpdatingPrice] = useState(false);
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -64,30 +67,6 @@ export default function ProductsPage() {
       }
     } catch (error) {
       console.error('Error adding product:', error);
-    }
-  };
-
-  const handleUpdateProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProduct) return;
-    try {
-      const response = await fetch('/api/products', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedProduct.id,
-          name: formData.name,
-        }),
-      });
-      const result = await response.json();
-      if (result.success) {
-        setShowEditModal(false);
-        setSelectedProduct(null);
-        setFormData({ name: '', sku: '', initialPrice: '' });
-        fetchProducts();
-      }
-    } catch (error) {
-      console.error('Error updating product:', error);
     }
   };
 
@@ -142,12 +121,6 @@ export default function ProductsPage() {
     } finally {
       setUpdatingPrice(false);
     }
-  };
-
-  const openEditModal = (product: Product) => {
-    setSelectedProduct(product);
-    setFormData({ name: product.name, sku: '', initialPrice: '' });
-    setShowEditModal(true);
   };
 
   const openPriceModal = (product: Product) => {
@@ -220,6 +193,30 @@ export default function ProductsPage() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const fetchProductAnalytics = async (productId: string) => {
+    setLoadingAnalytics(true);
+    try {
+      const response = await fetch(`/api/products/${productId}/analytics`);
+      const result = await response.json();
+      if (result.success) {
+        setAnalyticsData(result.data);
+        setShowAnalyticsModal(true);
+      } else {
+        alert(result.error || 'Gagal memuat analytics');
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+      alert('Terjadi kesalahan saat memuat analytics');
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  const openAnalyticsModal = (product: Product) => {
+    setSelectedProduct(product);
+    fetchProductAnalytics(product.id);
   };
 
   return (
@@ -298,18 +295,18 @@ export default function ProductsPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          onClick={() => openAnalyticsModal(product)}
+                          className="text-green-600 hover:text-green-900"
+                          title="Lihat Analytics"
+                        >
+                          <BarChart3 className="h-5 w-5" />
+                        </button>
+                        <button
                           onClick={() => openPriceModal(product)}
                           className="text-blue-600 hover:text-blue-900"
                           title="Ubah Harga"
                         >
                           <DollarSign className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => openEditModal(product)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                          title="Edit"
-                        >
-                          <Edit className="h-5 w-5" />
                         </button>
                       </div>
                     </td>
@@ -356,47 +353,6 @@ export default function ProductsPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Simpan
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Product Modal */}
-      {showEditModal && selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl border border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Edit Produk</h2>
-            <form onSubmit={handleUpdateProduct} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nama Produk *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setSelectedProduct(null);
-                  }}
                   className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Batal
@@ -680,6 +636,143 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Modal */}
+      {showAnalyticsModal && selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 w-full max-w-6xl shadow-xl border border-gray-200 my-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <TrendingUp className="h-6 w-6" />
+                Analytics Produk - {selectedProduct.name}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowAnalyticsModal(false);
+                  setAnalyticsData(null);
+                  setSelectedProduct(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {loadingAnalytics ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-gray-500">Memuat data analytics...</div>
+              </div>
+            ) : analyticsData ? (
+              analyticsData.hasStock ? (
+                <div className="space-y-6">
+                  {/* Stats Cards */}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-lg bg-white p-4 shadow-sm border border-gray-200">
+                      <p className="text-sm font-medium text-gray-600">Total Stok</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{analyticsData.totalStock}</p>
+                    </div>
+                    <div className="rounded-lg bg-white p-4 shadow-sm border border-gray-200">
+                      <p className="text-sm font-medium text-gray-600">Total Penjualan</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">
+                        Rp {analyticsData.totalSales.toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-4 shadow-sm border border-gray-200">
+                      <p className="text-sm font-medium text-gray-600">Total Keuntungan</p>
+                      <p className="mt-2 text-2xl font-bold text-green-600">
+                        Rp {analyticsData.totalProfit.toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-4 shadow-sm border border-gray-200">
+                      <p className="text-sm font-medium text-gray-600">Jumlah Terjual</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{analyticsData.totalQuantitySold}</p>
+                    </div>
+                  </div>
+
+                  {/* Stock Info */}
+                  <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Informasi Stok</h3>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lokasi</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Toko</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jumlah</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {analyticsData.stockInfo.map((stock: any, index: number) => (
+                            <tr key={index}>
+                              <td className="px-4 py-3 text-sm text-gray-900 capitalize">{stock.location}</td>
+                              <td className="px-4 py-3 text-sm text-gray-500">{stock.storeName || '-'}</td>
+                              <td className="px-4 py-3 text-sm font-semibold text-blue-600">{stock.quantity}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Charts */}
+                  {analyticsData.salesByDate.length > 0 && (
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                      {/* Sales by Date */}
+                      <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Penjualan per Tanggal</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <LineChart data={analyticsData.salesByDate}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="date" />
+                            <YAxis />
+                            <Tooltip formatter={(value: number) => `Rp ${value.toLocaleString('id-ID')}`} />
+                            <Legend />
+                            <Line type="monotone" dataKey="revenue" stroke="#0088FE" name="Pendapatan" />
+                            <Line type="monotone" dataKey="profit" stroke="#00C49F" name="Keuntungan" />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {/* Sales by Store */}
+                      {analyticsData.salesByStore.length > 0 && (
+                        <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4">Penjualan per Toko</h3>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={analyticsData.salesByStore}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="storeName" />
+                              <YAxis />
+                              <Tooltip formatter={(value: number) => `Rp ${value.toLocaleString('id-ID')}`} />
+                              <Legend />
+                              <Bar dataKey="revenue" fill="#0088FE" name="Pendapatan" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {analyticsData.salesByDate.length === 0 && (
+                    <div className="rounded-lg bg-gray-50 p-12 text-center border border-gray-200">
+                      <p className="text-gray-500">Belum ada data penjualan untuk produk ini</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-yellow-50 p-8 text-center border border-yellow-200">
+                  <AlertCircle className="h-12 w-12 text-yellow-600 mx-auto mb-4" />
+                  <p className="text-gray-700 font-medium">{analyticsData.message || 'Produk belum memiliki stok'}</p>
+                  <p className="text-sm text-gray-500 mt-2">Tambahkan stok terlebih dahulu untuk melihat analytics</p>
+                </div>
+              )
+            ) : (
+              <div className="rounded-lg bg-gray-50 p-12 text-center border border-gray-200">
+                <p className="text-gray-500">Tidak ada data</p>
+              </div>
+            )}
           </div>
         </div>
       )}

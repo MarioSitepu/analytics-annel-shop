@@ -1,4 +1,4 @@
-import { Product, Store, ProductLocation, ProductTransfer, ProductAddition, Sale, PriceHistory, UndetectedProduct } from '@/types';
+import { Product, Store, ProductLocation, ProductTransfer, ProductAddition, Sale, PriceHistory, UndetectedProduct, SalesUploadHistory } from '@/types';
 import fs from 'fs';
 import path from 'path';
 
@@ -251,5 +251,102 @@ export const addUndetectedProduct = (undetected: UndetectedProduct): void => {
   const undetectedProducts = getUndetectedProducts();
   undetectedProducts.push(undetected);
   saveUndetectedProducts(undetectedProducts);
+};
+
+// Sales Upload History
+export const getSalesUploadHistory = (): SalesUploadHistory[] => {
+  return readJSON<SalesUploadHistory[]>('salesUploadHistory.json', []);
+};
+
+export const saveSalesUploadHistory = (history: SalesUploadHistory[]): void => {
+  writeJSON('salesUploadHistory.json', history);
+};
+
+export const addSalesUploadHistory = (history: SalesUploadHistory): void => {
+  const histories = getSalesUploadHistory();
+  histories.push(history);
+  saveSalesUploadHistory(histories);
+};
+
+export const deleteSalesUploadHistory = (id: string): void => {
+  const histories = getSalesUploadHistory();
+  const filtered = histories.filter(h => h.id !== id);
+  saveSalesUploadHistory(filtered);
+};
+
+// Helper function to calculate stock at a specific date
+// This calculates stock by reverse-engineering from current stock
+export const getStockAtDate = (
+  productId: string,
+  location: 'gudang' | 'toko',
+  storeId: string | undefined,
+  targetDate: string
+): number => {
+  const locations = getProductLocations();
+  const additions = getProductAdditions();
+  const transfers = getProductTransfers();
+  const sales = getSales();
+
+  // Get current stock
+  const currentLocation = locations.find(
+    l => l.productId === productId && l.location === location && l.storeId === storeId
+  );
+  
+  // If no location exists, start from 0
+  let stock = currentLocation?.quantity || 0;
+
+  const targetDateTime = new Date(targetDate).getTime();
+  
+  // Reverse calculate: start from current stock and work backwards
+  // Subtract additions that happened after target date (they weren't there yet)
+  additions
+    .filter(a => 
+      a.productId === productId && 
+      a.location === location && 
+      a.storeId === storeId &&
+      new Date(a.timestamp).getTime() > targetDateTime
+    )
+    .forEach(a => {
+      stock = Math.max(0, stock - a.quantity);
+    });
+
+  // Subtract transfers TO this location after target date (they weren't there yet)
+  transfers
+    .filter(t => 
+      t.productId === productId &&
+      t.toLocation === location &&
+      t.toStoreId === storeId &&
+      new Date(t.timestamp).getTime() > targetDateTime
+    )
+    .forEach(t => {
+      stock = Math.max(0, stock - t.quantity);
+    });
+
+  // Add back transfers FROM this location after target date (they were still there)
+  transfers
+    .filter(t => 
+      t.productId === productId &&
+      t.fromLocation === location &&
+      t.fromStoreId === storeId &&
+      new Date(t.timestamp).getTime() > targetDateTime
+    )
+    .forEach(t => {
+      stock += t.quantity;
+    });
+
+  // Add back sales after target date (they were still in stock)
+  if (location === 'toko') {
+    sales
+      .filter(s => 
+        s.productId === productId &&
+        s.storeId === storeId &&
+        new Date(s.timestamp).getTime() > targetDateTime
+      )
+      .forEach(s => {
+        stock += s.quantity;
+      });
+  }
+
+  return Math.max(0, stock);
 };
 

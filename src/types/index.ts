@@ -79,3 +79,16 @@ export interface UndetectedProduct {
   timestamp: string;
 }
 
+export interface SalesUploadHistory {
+  id: string;
+  storeId: string;
+  storeName: string;
+  fileName: string;
+  fileType: string;
+  imported: number;
+  skipped: number;
+  totalRows: number;
+  errors?: string[];
+  timestamp: string;
+}
+

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { addSales, getProducts, getCostPriceAtTime, getStores, addUndetectedProduct, addCostPriceHistory } from '@/lib/storage';
+import { addSales, getSales, getProducts, getCostPriceAtTime, getStores, addUndetectedProduct, addCostPriceHistory, getProductLocations, updateProductLocation, getStockAtDate, getProductAdditions, getProductTransfers, addSalesUploadHistory } from '@/lib/storage';
 import { Sale } from '@/types';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -186,16 +186,148 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    if (sales.length > 0) {
-      addSales(sales);
+    // Urutkan sales berdasarkan tanggal (ascending) untuk mempertimbangkan timeline
+    sales.sort((a, b) => {
+      const dateA = new Date(a.timestamp).getTime();
+      const dateB = new Date(b.timestamp).getTime();
+      return dateA - dateB;
+    });
+
+    // Validasi dan update stok dengan mempertimbangkan timeline
+    const validatedSales: Sale[] = [];
+    const additions = getProductAdditions();
+    const transfers = getProductTransfers();
+    const existingSales = getSales();
+    
+    // Group by product+store untuk tracking stok
+    const stockTracker: Map<string, number> = new Map();
+
+    for (const sale of sales) {
+      const key = `${sale.productId}_${sale.storeId}`;
+      const saleDate = new Date(sale.timestamp).getTime();
+      
+      // Initialize stock tracker jika belum ada
+      if (!stockTracker.has(key)) {
+        // Hitung stok awal pada tanggal penjualan pertama untuk produk+store ini
+        const firstSaleForProduct = sales
+          .filter(s => s.productId === sale.productId && s.storeId === sale.storeId)
+          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0];
+        
+        if (firstSaleForProduct) {
+          const firstSaleDate = firstSaleForProduct.date;
+          // Hitung stok pada tanggal pertama dengan mempertimbangkan semua perubahan sebelum tanggal tersebut
+          let initialStock = getStockAtDate(sale.productId, 'toko', sale.storeId, firstSaleDate);
+          
+          // Kurangi penjualan yang sudah ada di database sebelum tanggal pertama
+          const existingSalesBefore = existingSales.filter(
+            s => s.productId === sale.productId &&
+                 s.storeId === sale.storeId &&
+                 new Date(s.timestamp).getTime() < new Date(firstSaleForProduct.timestamp).getTime()
+          );
+          existingSalesBefore.forEach(s => {
+            initialStock = Math.max(0, initialStock - s.quantity);
+          });
+          
+          stockTracker.set(key, initialStock);
+        } else {
+          stockTracker.set(key, getStockAtDate(sale.productId, 'toko', sale.storeId, sale.date));
+        }
+      }
+
+      let currentStock = stockTracker.get(key) || 0;
+
+      // Tambahkan penambahan stok yang terjadi antara penjualan sebelumnya dan penjualan ini
+      const lastSaleDate = validatedSales
+        .filter(s => s.productId === sale.productId && s.storeId === sale.storeId)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+      
+      const additionsBetween = additions.filter(
+        a => a.productId === sale.productId &&
+             a.location === 'toko' &&
+             a.storeId === sale.storeId &&
+             (!lastSaleDate || new Date(a.timestamp).getTime() > new Date(lastSaleDate.timestamp).getTime()) &&
+             new Date(a.timestamp).getTime() <= saleDate
+      );
+      additionsBetween.forEach(a => {
+        currentStock += a.quantity;
+      });
+
+      // Tambahkan transfer masuk yang terjadi antara penjualan sebelumnya dan penjualan ini
+      const transfersInBetween = transfers.filter(
+        t => t.productId === sale.productId &&
+             t.toLocation === 'toko' &&
+             t.toStoreId === sale.storeId &&
+             (!lastSaleDate || new Date(t.timestamp).getTime() > new Date(lastSaleDate.timestamp).getTime()) &&
+             new Date(t.timestamp).getTime() <= saleDate
+      );
+      transfersInBetween.forEach(t => {
+        currentStock += t.quantity;
+      });
+
+      // Kurangi transfer keluar yang terjadi antara penjualan sebelumnya dan penjualan ini
+      const transfersOutBetween = transfers.filter(
+        t => t.productId === sale.productId &&
+             t.fromLocation === 'toko' &&
+             t.fromStoreId === sale.storeId &&
+             (!lastSaleDate || new Date(t.timestamp).getTime() > new Date(lastSaleDate.timestamp).getTime()) &&
+             new Date(t.timestamp).getTime() <= saleDate
+      );
+      transfersOutBetween.forEach(t => {
+        currentStock = Math.max(0, currentStock - t.quantity);
+      });
+
+      // Validasi stok
+      if (currentStock < sale.quantity) {
+        const rowNumber = rows.findIndex((row, idx) => {
+          // Find the row that matches this sale
+          const namaVariasi = row['Nama Variasi'] || row['Nama Produk'] || row['Product Name'] || row['productName'] || '';
+          return namaVariasi.toLowerCase() === sale.productName.toLowerCase();
+        }) + 2;
+        
+        errors.push(
+          `Baris ${rowNumber}: Stok tidak cukup untuk produk "${sale.productName}" pada tanggal ${sale.date} ` +
+          `(Stok tersedia: ${currentStock}, Dibutuhkan: ${sale.quantity})`
+        );
+        continue; // Skip sale ini
+      }
+
+      // Kurangi stok sesuai penjualan
+      currentStock = Math.max(0, currentStock - sale.quantity);
+      stockTracker.set(key, currentStock);
+      
+      // Update location dengan stok terakhir
+      updateProductLocation(sale.productId, 'toko', sale.storeId, currentStock);
+      
+      validatedSales.push(sale);
     }
+    
+    // Simpan sales setelah stok diupdate
+    if (validatedSales.length > 0) {
+      addSales(validatedSales);
+    }
+
+    // Simpan history upload
+    const uploadHistory = {
+      id: `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      storeId,
+      storeName: store.name,
+      fileName: file.name,
+      fileType: isExcel ? 'Excel' : 'CSV',
+      imported: validatedSales.length,
+      skipped: sales.length - validatedSales.length,
+      totalRows: rows.length,
+      errors: errors.length > 0 ? errors : undefined,
+      timestamp: new Date().toISOString(),
+    };
+    addSalesUploadHistory(uploadHistory);
 
     return NextResponse.json({
       success: true,
       data: {
-        imported: sales.length,
+        imported: validatedSales.length,
         errors: errors.length > 0 ? errors : undefined,
         totalRows: rows.length,
+        skipped: sales.length - validatedSales.length,
       },
     });
   } catch (error) {

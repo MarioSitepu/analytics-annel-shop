@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Upload, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
-import { Store } from '@/types';
+import { Upload, ArrowLeft, CheckCircle, AlertCircle, Trash2, History } from 'lucide-react';
+import { Store, SalesUploadHistory } from '@/types';
 
 export default function UploadSalesTypePage() {
   const params = useParams();
@@ -14,10 +14,13 @@ export default function UploadSalesTypePage() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string; errors?: string[] } | null>(null);
+  const [uploadHistory, setUploadHistory] = useState<SalesUploadHistory[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     fetchStores();
-  }, [type]);
+    fetchUploadHistory();
+  }, [type, selectedStoreId]);
 
   const fetchStores = async () => {
     try {
@@ -30,6 +33,58 @@ export default function UploadSalesTypePage() {
     } catch (error) {
       console.error('Error fetching stores:', error);
     }
+  };
+
+  const fetchUploadHistory = async () => {
+    if (!selectedStoreId) {
+      setUploadHistory([]);
+      return;
+    }
+    
+    setLoadingHistory(true);
+    try {
+      const response = await fetch(`/api/sales/upload/history?storeId=${selectedStoreId}`);
+      const result = await response.json();
+      if (result.success) {
+        setUploadHistory(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching upload history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleDeleteHistory = async (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus history upload ini?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/sales/upload/history?id=${id}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (result.success) {
+        fetchUploadHistory();
+      } else {
+        alert('Gagal menghapus history');
+      }
+    } catch (error) {
+      console.error('Error deleting history:', error);
+      alert('Terjadi kesalahan saat menghapus history');
+    }
+  };
+
+  const formatDateTime = (timestamp: string): string => {
+    const date = new Date(timestamp);
+    return date.toLocaleString('id-ID', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,6 +125,8 @@ export default function UploadSalesTypePage() {
         // Reset file input
         const fileInput = document.getElementById('file-input') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
+        // Refresh history
+        fetchUploadHistory();
       } else {
         setUploadResult({
           success: false,
@@ -234,6 +291,97 @@ export default function UploadSalesTypePage() {
           </div>
         </form>
       </div>
+
+      {/* Upload History */}
+      {selectedStoreId && (
+        <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <History className="h-5 w-5" />
+              History Upload CSV
+            </h2>
+          </div>
+
+          {loadingHistory ? (
+            <div className="text-center py-8 text-gray-500">Memuat history...</div>
+          ) : uploadHistory.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              Belum ada history upload untuk toko ini
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Waktu Upload
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nama File
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tipe File
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Total Baris
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Berhasil
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Dilewati
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Error
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Aksi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {uploadHistory.map((history) => (
+                    <tr key={history.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {formatDateTime(history.timestamp)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {history.fileName}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
+                          {history.fileType}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {history.totalRows}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600 font-medium">
+                        {history.imported}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-yellow-600 font-medium">
+                        {history.skipped}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-red-600 font-medium">
+                        {history.errors?.length || 0}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleDeleteHistory(history.id)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Hapus History"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

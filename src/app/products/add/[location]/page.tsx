@@ -20,17 +20,19 @@ export default function LocationProductPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [selectedStore, setSelectedStore] = useState<string>('');
   
   const [addData, setAddData] = useState({
     productId: '',
     quantity: '',
+    date: '',
+    storeId: '',
   });
   
   const [transferData, setTransferData] = useState({
     productId: '',
     quantity: '',
     toStoreId: '',
+    fromStoreId: '',
   });
 
   useEffect(() => {
@@ -58,9 +60,6 @@ export default function LocationProductPage() {
       if (storesResult.success) {
         const filteredStores = storesResult.data.filter((s: Store) => s.type === 'offline');
         setStores(filteredStores);
-        if (filteredStores.length > 0 && !selectedStore) {
-          setSelectedStore(filteredStores[0].id);
-        }
       }
       if (locationsResult.success) setLocations(locationsResult.data);
       if (historyResult.success) {
@@ -85,21 +84,41 @@ export default function LocationProductPage() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validasi tanggal jika gudang
+    if (isGudang && !addData.date) {
+      alert('Tanggal penambahan stok harus diisi untuk gudang');
+      return;
+    }
+    
     try {
+      // Format tanggal dari dd/mm/yyyy atau yyyy-mm-dd ke yyyy-mm-dd
+      let formattedDate = addData.date;
+      if (isGudang && addData.date) {
+        // Jika format dd/mm/yyyy, convert ke yyyy-mm-dd
+        if (addData.date.includes('/')) {
+          const [day, month, year] = addData.date.split('/');
+          formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+      }
+      
       const response = await fetch('/api/products/addition', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId: addData.productId,
           location: isGudang ? 'gudang' : 'toko',
-          storeId: isGudang ? undefined : selectedStore,
+          storeId: isGudang ? undefined : addData.storeId,
           quantity: parseFloat(addData.quantity),
+          date: isGudang && formattedDate ? formattedDate : undefined,
         }),
       });
       const result = await response.json();
       if (result.success) {
         setShowAddModal(false);
-        setAddData({ productId: '', quantity: '' });
+        const today = new Date();
+        const defaultDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+        setAddData({ productId: '', quantity: '', date: defaultDate, storeId: '' });
         fetchData();
       } else {
         alert(result.error || 'Gagal menambahkan produk');
@@ -114,6 +133,18 @@ export default function LocationProductPage() {
     e.preventDefault();
     if (!selectedProduct) return;
     
+    // Validasi untuk transfer dari toko
+    if (!isGudang && !transferData.fromStoreId) {
+      alert('Pilih toko terlebih dahulu');
+      return;
+    }
+    
+    // Validasi untuk transfer ke toko
+    if (isGudang && !transferData.toStoreId) {
+      alert('Pilih toko tujuan terlebih dahulu');
+      return;
+    }
+    
     try {
       const response = await fetch('/api/products/transfer', {
         method: 'POST',
@@ -122,7 +153,7 @@ export default function LocationProductPage() {
           productId: transferData.productId,
           fromLocation: isGudang ? 'gudang' : 'toko',
           toLocation: isGudang ? 'toko' : 'gudang',
-          fromStoreId: isGudang ? undefined : selectedStore,
+          fromStoreId: isGudang ? undefined : transferData.fromStoreId,
           toStoreId: isGudang ? transferData.toStoreId : undefined,
           quantity: parseFloat(transferData.quantity),
         }),
@@ -131,7 +162,7 @@ export default function LocationProductPage() {
       if (result.success) {
         setShowTransferModal(false);
         setSelectedProduct(null);
-        setTransferData({ productId: '', quantity: '', toStoreId: '' });
+        setTransferData({ productId: '', quantity: '', toStoreId: '', fromStoreId: '' });
         fetchData();
       } else {
         alert(result.error || 'Gagal melakukan transfer');
@@ -145,12 +176,10 @@ export default function LocationProductPage() {
   const locationHistory = [
     ...transfers.filter(t => 
       (isGudang && (t.fromLocation === 'gudang' || t.toLocation === 'gudang')) ||
-      (!isGudang && ((t.fromLocation === 'toko' && t.fromStoreId === selectedStore) || 
-                     (t.toLocation === 'toko' && t.toStoreId === selectedStore)))
+      (!isGudang && (t.fromLocation === 'toko' || t.toLocation === 'toko'))
     ),
     ...additions.filter(a => 
-      a.location === (isGudang ? 'gudang' : 'toko') &&
-      (isGudang || a.storeId === selectedStore)
+      a.location === (isGudang ? 'gudang' : 'toko')
     ),
   ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
@@ -196,27 +225,16 @@ export default function LocationProductPage() {
         </div>
       </div>
 
-      {!isGudang && (
-        <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Pilih Toko
-          </label>
-          <select
-            value={selectedStore}
-            onChange={(e) => setSelectedStore(e.target.value)}
-            className="w-full max-w-md rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
-          >
-            {stores.map(store => (
-              <option key={store.id} value={store.id}>{store.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
 
       {/* Action Buttons */}
       <div className="flex gap-4">
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            const today = new Date();
+            const defaultDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+            setAddData({ productId: '', quantity: '', date: defaultDate, storeId: stores.length > 0 ? stores[0].id : '' });
+            setShowAddModal(true);
+          }}
           className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 text-sm font-medium text-white hover:bg-green-700"
         >
           <Plus className="h-5 w-5" />
@@ -252,38 +270,35 @@ export default function LocationProductPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Stok Saat Ini
                 </th>
-                {!isGudang && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Toko
-                  </th>
-                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {products.length === 0 ? (
                 <tr>
-                  <td colSpan={isGudang ? 2 : 3} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={2} className="px-6 py-12 text-center text-gray-500">
                     Belum ada produk
                   </td>
                 </tr>
               ) : (
-                products.map((product) => (
-                  <tr key={product.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {product.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="font-semibold text-blue-600">
-                        {getProductLocation(product.id, isGudang ? undefined : selectedStore)}
-                      </span>
-                    </td>
-                    {!isGudang && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {getStoreName(selectedStore)}
+                products.map((product) => {
+                  // Untuk toko, hitung total stok dari semua toko
+                  const totalStock = isGudang 
+                    ? getProductLocation(product.id, undefined)
+                    : stores.reduce((sum, store) => sum + getProductLocation(product.id, store.id), 0);
+                  
+                  return (
+                    <tr key={product.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {product.name}
                       </td>
-                    )}
-                  </tr>
-                ))
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <span className="font-semibold text-blue-600">
+                          {totalStock}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -387,7 +402,9 @@ export default function LocationProductPage() {
                 <select
                   required
                   value={addData.productId}
-                  onChange={(e) => setAddData({ ...addData, productId: e.target.value })}
+                  onChange={(e) => {
+                    setAddData({ ...addData, productId: e.target.value });
+                  }}
                   className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
                 >
                   <option value="">Pilih Produk</option>
@@ -396,6 +413,84 @@ export default function LocationProductPage() {
                   ))}
                 </select>
               </div>
+              {isGudang && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tanggal Penambahan Stok * (dd/mm/yyyy)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="dd/mm/yyyy"
+                    value={addData.date}
+                    onChange={(e) => {
+                      let value = e.target.value;
+                      // Hanya allow angka dan slash
+                      value = value.replace(/[^\d/]/g, '');
+                      
+                      // Auto format: dd/mm/yyyy
+                      if (value.length <= 2) {
+                        // Only day
+                        setAddData({ ...addData, date: value });
+                      } else if (value.length <= 5) {
+                        // Day and month
+                        if (value.length === 3 && !value.includes('/')) {
+                          value = value.slice(0, 2) + '/' + value.slice(2);
+                        }
+                        setAddData({ ...addData, date: value });
+                      } else if (value.length <= 10) {
+                        // Day, month, and year
+                        if (value.length === 6 && value.split('/').length === 2) {
+                          value = value.slice(0, 5) + '/' + value.slice(5);
+                        }
+                        setAddData({ ...addData, date: value });
+                      }
+                      
+                      // Validasi tanggal setelah input lengkap
+                      if (value.length === 10) {
+                        const [day, month, year] = value.split('/');
+                        const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                        const today = new Date();
+                        today.setHours(23, 59, 59, 999); // Set to end of today
+                        
+                        if (isNaN(selectedDate.getTime())) {
+                          alert('Format tanggal tidak valid');
+                          return;
+                        }
+                        
+                        if (selectedDate > today) {
+                          alert('Tidak bisa memilih tanggal yang belum dimulai (besok atau masa depan)');
+                          const todayFormatted = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+                          setAddData({ ...addData, date: todayFormatted });
+                          return;
+                        }
+                      }
+                    }}
+                    className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Format: dd/mm/yyyy (contoh: 05/12/2025). Tidak bisa memilih hari yang belum dimulai.
+                  </p>
+                </div>
+              )}
+              {!isGudang && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Toko *
+                  </label>
+                  <select
+                    required
+                    value={addData.storeId}
+                    onChange={(e) => setAddData({ ...addData, storeId: e.target.value })}
+                    className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
+                  >
+                    <option value="">Pilih Toko</option>
+                    {stores.map(store => (
+                      <option key={store.id} value={store.id}>{store.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Jumlah *
@@ -412,7 +507,12 @@ export default function LocationProductPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    const today = new Date();
+                    const defaultDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+                    setAddData({ productId: '', quantity: '', date: defaultDate, storeId: '' });
+                  }}
                   className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Batal
@@ -464,6 +564,24 @@ export default function LocationProductPage() {
                     required
                     value={transferData.toStoreId}
                     onChange={(e) => setTransferData({ ...transferData, toStoreId: e.target.value })}
+                    className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
+                  >
+                    <option value="">Pilih Toko</option>
+                    {stores.map(store => (
+                      <option key={store.id} value={store.id}>{store.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {!isGudang && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dari Toko *
+                  </label>
+                  <select
+                    required
+                    value={transferData.fromStoreId}
+                    onChange={(e) => setTransferData({ ...transferData, fromStoreId: e.target.value })}
                     className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
                   >
                     <option value="">Pilih Toko</option>
