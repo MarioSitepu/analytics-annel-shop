@@ -14,21 +14,28 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:setup": "prisma generate && prisma migrate dev --name init",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "create-user": "tsx scripts/create-user.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
+    "@upstash/ratelimit": "^1.1.2",
+    "@upstash/redis": "^1.35.0",
+    "bcrypt": "^5.1.1",
     "date-fns": "^3.3.1",
     "lucide-react": "^0.469.0",
     "next": "16.0.8",
+    "next-auth": "^5.0.0-beta.25",
     "papaparse": "^5.4.1",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "recharts": "^2.12.7",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcrypt": "^5.0.2",
     "@types/node": "^20",
     "@types/papaparse": "^5.5.1",
     "@types/react": "^19",
@@ -39,6 +46,7 @@
     "eslint-config-next": "16.0.8",
     "prisma": "^5.20.0",
     "tailwindcss": "^4",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }
