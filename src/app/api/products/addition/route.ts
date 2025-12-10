@@ -69,22 +69,27 @@ export async function POST(request: NextRequest) {
 
     // If product has priceUpdateMode = 'purchase', update cost price when adding stock
     // If costPrice is provided in request, update it
-    const product = await getProduct(productId);
-    if (product && product.priceUpdateMode === 'purchase' && costPrice && costPrice > 0) {
-      // Format timestamp untuk price history: yyyy-mm-dd HH:mm
-      const dateForPrice = new Date(finalTimestamp);
-      const year = dateForPrice.getFullYear();
-      const month = (dateForPrice.getMonth() + 1).toString().padStart(2, '0');
-      const day = dateForPrice.getDate().toString().padStart(2, '0');
-      const hours = dateForPrice.getHours().toString().padStart(2, '0');
-      const minutes = dateForPrice.getMinutes().toString().padStart(2, '0');
-      const priceTimestamp = `${year}-${month}-${day} ${hours}:${minutes}`;
-      await addCostPriceHistory(productId, costPrice, priceTimestamp);
+    if (costPrice && costPrice > 0) {
+      try {
+        const product = await getProduct(productId);
+        if (product && product.priceUpdateMode === 'purchase') {
+          // Use ISO timestamp format for database
+          await addCostPriceHistory(productId, costPrice, finalTimestamp);
+        }
+      } catch (err) {
+        console.error('Error updating cost price (non-critical):', err);
+        // Continue - addition already successful
+      }
     }
 
     return NextResponse.json({ success: true, data: addition });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Failed to add product' }, { status: 500 });
+    console.error('Error adding product quantity:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to add product';
+    return NextResponse.json({ 
+      success: false, 
+      error: errorMessage 
+    }, { status: 500 });
   }
 }
 

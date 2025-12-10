@@ -34,22 +34,32 @@ export async function POST(request: NextRequest) {
     };
 
     // Create product first
-    await addProduct(product);
+    try {
+      await addProduct(product);
+    } catch (err) {
+      console.error('Error creating product:', err);
+      throw err; // Re-throw to be caught by outer catch
+    }
     
-    // Add cost price history if initial price provided
+    // Add cost price history if initial price provided (non-blocking)
     if (initialCostPrice > 0) {
       try {
         await addCostPriceHistory(product.id, initialCostPrice, timestamp);
       } catch (err) {
-        console.error('Error adding cost price history:', err);
-        // Continue even if history fails - product already created
+        console.error('Error adding cost price history (non-critical):', err);
+        // Continue - product already created successfully
       }
     }
     
     // Fetch the created product with relations
-    const createdProduct = await getProduct(product.id);
-    
-    return NextResponse.json({ success: true, data: createdProduct || product });
+    try {
+      const createdProduct = await getProduct(product.id);
+      return NextResponse.json({ success: true, data: createdProduct || product });
+    } catch (err) {
+      // If fetch fails, return the product data we have
+      console.error('Error fetching created product:', err);
+      return NextResponse.json({ success: true, data: product });
+    }
   } catch (error) {
     console.error('Error creating product:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to create product';
