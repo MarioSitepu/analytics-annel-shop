@@ -1,199 +1,407 @@
 import { Product, Store, ProductLocation, ProductTransfer, ProductAddition, Sale, PriceHistory, UndetectedProduct, SalesUploadHistory } from '@/types';
-import fs from 'fs';
-import path from 'path';
+import { prisma } from './db';
+import { Prisma } from '@prisma/client';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+// Helper to convert Prisma models to our types
+const mapProduct = (p: any): Product => ({
+  id: p.id,
+  name: p.name,
+  sku: p.sku || undefined,
+  costPrice: p.costPrice,
+  costHistory: p.priceHistory?.filter((h: any) => h.type === 'cost').map((h: any) => ({
+    price: h.price,
+    timestamp: h.timestamp.toISOString(),
+  })) || [],
+  sellingPrice: p.sellingPrice || undefined,
+  sellingPriceHistory: p.priceHistory?.filter((h: any) => h.type === 'selling').map((h: any) => ({
+    price: h.price,
+    timestamp: h.timestamp.toISOString(),
+  })) || [],
+  createdAt: p.createdAt.toISOString(),
+  priceUpdateMode: (p.priceUpdateMode as 'date' | 'purchase') || 'date',
+});
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+const mapStore = (s: any): Store => ({
+  id: s.id,
+  name: s.name,
+  type: s.type as 'offline' | 'online',
+  address: s.address || undefined,
+  createdAt: s.createdAt.toISOString(),
+});
 
-const getFilePath = (filename: string) => path.join(DATA_DIR, filename);
+const mapProductLocation = (l: any): ProductLocation => ({
+  productId: l.productId,
+  location: l.location as 'gudang' | 'toko',
+  quantity: l.quantity,
+  storeId: l.storeId || undefined,
+});
 
-// Helper functions to read/write JSON files
-const readJSON = <T>(filename: string, defaultValue: T): T => {
-  const filePath = getFilePath(filename);
-  if (!fs.existsSync(filePath)) {
-    return defaultValue;
-  }
-  try {
-    const data = fs.readFileSync(filePath, 'utf-8');
-    if (!data || data.trim() === '') {
-      return defaultValue;
-    }
-    return JSON.parse(data) as T;
-  } catch (error) {
-    console.error(`Error reading ${filename}:`, error);
-    return defaultValue;
-  }
-};
+const mapProductTransfer = (t: any): ProductTransfer => ({
+  id: t.id,
+  productId: t.productId,
+  fromLocation: t.fromLocation as 'gudang' | 'toko',
+  toLocation: t.toLocation as 'gudang' | 'toko',
+  fromStoreId: t.fromStoreId || undefined,
+  toStoreId: t.toStoreId || undefined,
+  quantity: t.quantity,
+  timestamp: t.timestamp.toISOString(),
+});
 
-const writeJSON = <T>(filename: string, data: T): void => {
-  const filePath = getFilePath(filename);
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (error) {
-    console.error(`Error writing ${filename}:`, error);
-    throw error;
-  }
-};
+const mapProductAddition = (a: any): ProductAddition => ({
+  id: a.id,
+  productId: a.productId,
+  location: a.location as 'gudang' | 'toko',
+  storeId: a.storeId || undefined,
+  quantity: a.quantity,
+  timestamp: a.timestamp.toISOString(),
+});
+
+const mapSale = (s: any): Sale => ({
+  id: s.id,
+  storeId: s.storeId,
+  productId: s.productId,
+  productName: s.productName,
+  quantity: s.quantity,
+  price: s.price,
+  total: s.total,
+  date: s.date,
+  timestamp: s.timestamp.toISOString(),
+});
+
+const mapUndetectedProduct = (u: any): UndetectedProduct => ({
+  id: u.id,
+  productName: u.productName,
+  storeId: u.storeId,
+  storeName: u.storeName,
+  rowNumber: u.rowNumber,
+  timestamp: u.timestamp.toISOString(),
+});
+
+const mapSalesUploadHistory = (h: any): SalesUploadHistory => ({
+  id: h.id,
+  storeId: h.storeId,
+  storeName: h.storeName,
+  fileName: h.fileName,
+  fileType: h.fileType,
+  imported: h.imported,
+  skipped: h.skipped,
+  totalRows: h.totalRows,
+  errors: h.errors || [],
+  timestamp: h.timestamp.toISOString(),
+});
 
 // Products
-export const getProducts = (): Product[] => {
-  const products = readJSON<Product[]>('products.json', []);
-  // Migrate old products to new structure (backward compatibility)
-  return products.map(product => {
-    // If product has old priceHistory but no costHistory, migrate it
-    if ((product as any).priceHistory && !product.costHistory) {
-      const oldPriceHistory = (product as any).priceHistory;
-      return {
-        ...product,
-        costPrice: product.costPrice || (oldPriceHistory.length > 0 ? oldPriceHistory[oldPriceHistory.length - 1].price : 0),
-        costHistory: oldPriceHistory,
-        priceHistory: undefined, // Remove old field
-      } as Product;
-    }
-    // Ensure costPrice exists
-    if (!product.costPrice && product.costHistory && product.costHistory.length > 0) {
-      const sorted = [...product.costHistory].sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      product.costPrice = sorted[0].price;
-    }
-    return product;
+export const getProducts = async (): Promise<Product[]> => {
+  const products = await prisma.product.findMany({
+    include: {
+      priceHistory: {
+        orderBy: { timestamp: 'desc' },
+      },
+    },
+  });
+  return products.map(mapProduct);
+};
+
+export const saveProducts = async (products: Product[]): Promise<void> => {
+  // This function is kept for backward compatibility but may not be used
+  // Individual add/update functions should be used instead
+  for (const product of products) {
+    await prisma.product.upsert({
+      where: { id: product.id },
+      update: {
+        name: product.name,
+        sku: product.sku,
+        costPrice: product.costPrice,
+        sellingPrice: product.sellingPrice,
+        priceUpdateMode: product.priceUpdateMode,
+      },
+      create: {
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        costPrice: product.costPrice,
+        sellingPrice: product.sellingPrice,
+        priceUpdateMode: product.priceUpdateMode,
+        createdAt: new Date(product.createdAt),
+      },
+    });
+  }
+};
+
+export const getProduct = async (id: string): Promise<Product | undefined> => {
+  const product = await prisma.product.findUnique({
+    where: { id },
+    include: {
+      priceHistory: {
+        orderBy: { timestamp: 'desc' },
+      },
+    },
+  });
+  return product ? mapProduct(product) : undefined;
+};
+
+export const addProduct = async (product: Product): Promise<void> => {
+  await prisma.product.create({
+    data: {
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      costPrice: product.costPrice,
+      sellingPrice: product.sellingPrice,
+      priceUpdateMode: product.priceUpdateMode,
+      createdAt: new Date(product.createdAt),
+    },
   });
 };
 
-export const saveProducts = (products: Product[]): void => {
-  writeJSON('products.json', products);
-};
-
-export const getProduct = (id: string): Product | undefined => {
-  const products = getProducts();
-  return products.find(p => p.id === id);
-};
-
-export const addProduct = (product: Product): void => {
-  const products = getProducts();
-  products.push(product);
-  saveProducts(products);
-};
-
-export const updateProduct = (id: string, updates: Partial<Product>): void => {
-  const products = getProducts();
-  const index = products.findIndex(p => p.id === id);
-  if (index !== -1) {
-    products[index] = { ...products[index], ...updates };
-    saveProducts(products);
-  }
+export const updateProduct = async (id: string, updates: Partial<Product>): Promise<void> => {
+  await prisma.product.update({
+    where: { id },
+    data: {
+      name: updates.name,
+      sku: updates.sku,
+      costPrice: updates.costPrice,
+      sellingPrice: updates.sellingPrice,
+      priceUpdateMode: updates.priceUpdateMode,
+    },
+  });
 };
 
 // Stores
-export const getStores = (): Store[] => {
-  return readJSON<Store[]>('stores.json', []);
+export const getStores = async (): Promise<Store[]> => {
+  const stores = await prisma.store.findMany();
+  return stores.map(mapStore);
 };
 
-export const saveStores = (stores: Store[]): void => {
-  writeJSON('stores.json', stores);
+export const saveStores = async (stores: Store[]): Promise<void> => {
+  for (const store of stores) {
+    await prisma.store.upsert({
+      where: { id: store.id },
+      update: {
+        name: store.name,
+        type: store.type,
+        address: store.address,
+      },
+      create: {
+        id: store.id,
+        name: store.name,
+        type: store.type,
+        address: store.address,
+        createdAt: new Date(store.createdAt),
+      },
+    });
+  }
 };
 
-export const addStore = (store: Store): void => {
-  const stores = getStores();
-  stores.push(store);
-  saveStores(stores);
+export const addStore = async (store: Store): Promise<void> => {
+  await prisma.store.create({
+    data: {
+      id: store.id,
+      name: store.name,
+      type: store.type,
+      address: store.address,
+      createdAt: new Date(store.createdAt),
+    },
+  });
 };
 
 // Product Locations
-export const getProductLocations = (): ProductLocation[] => {
-  return readJSON<ProductLocation[]>('productLocations.json', []);
+export const getProductLocations = async (): Promise<ProductLocation[]> => {
+  const locations = await prisma.productLocation.findMany();
+  return locations.map(mapProductLocation);
 };
 
-export const saveProductLocations = (locations: ProductLocation[]): void => {
-  writeJSON('productLocations.json', locations);
+export const saveProductLocations = async (locations: ProductLocation[]): Promise<void> => {
+  for (const location of locations) {
+    await prisma.productLocation.upsert({
+      where: {
+        productId_location_storeId: {
+          productId: location.productId,
+          location: location.location,
+          storeId: location.storeId || null,
+        } as any,
+      },
+      update: {
+        quantity: location.quantity,
+      },
+      create: {
+        productId: location.productId,
+        location: location.location,
+        storeId: location.storeId,
+        quantity: location.quantity,
+      },
+    });
+  }
 };
 
-export const updateProductLocation = (
+export const updateProductLocation = async (
   productId: string,
   location: 'gudang' | 'toko',
   storeId: string | undefined,
   quantity: number
-): void => {
-  const locations = getProductLocations();
-  const index = locations.findIndex(
-    l => l.productId === productId && l.location === location && l.storeId === storeId
-  );
-  
-  if (index !== -1) {
-    locations[index].quantity = quantity;
-  } else {
-    locations.push({ productId, location, quantity, storeId });
-  }
-  
-  saveProductLocations(locations);
+): Promise<void> => {
+  await prisma.productLocation.upsert({
+    where: {
+      productId_location_storeId: {
+        productId,
+        location,
+        storeId: storeId || null,
+      } as any,
+    },
+    update: {
+      quantity,
+    },
+    create: {
+      productId,
+      location,
+      storeId,
+      quantity,
+    },
+  });
 };
 
 // Product Transfers
-export const getProductTransfers = (): ProductTransfer[] => {
-  return readJSON<ProductTransfer[]>('productTransfers.json', []);
+export const getProductTransfers = async (): Promise<ProductTransfer[]> => {
+  const transfers = await prisma.productTransfer.findMany({
+    orderBy: { timestamp: 'desc' },
+  });
+  return transfers.map(mapProductTransfer);
 };
 
-export const saveProductTransfers = (transfers: ProductTransfer[]): void => {
-  writeJSON('productTransfers.json', transfers);
-};
-
-export const addProductTransfer = (transfer: ProductTransfer): void => {
-  const transfers = getProductTransfers();
-  transfers.push(transfer);
-  saveProductTransfers(transfers);
-};
-
-// Product Additions
-export const getProductAdditions = (): ProductAddition[] => {
-  return readJSON<ProductAddition[]>('productAdditions.json', []);
-};
-
-export const saveProductAdditions = (additions: ProductAddition[]): void => {
-  writeJSON('productAdditions.json', additions);
-};
-
-export const addProductAddition = (addition: ProductAddition): void => {
-  const additions = getProductAdditions();
-  additions.push(addition);
-  saveProductAdditions(additions);
-};
-
-// Sales
-export const getSales = (): Sale[] => {
-  return readJSON<Sale[]>('sales.json', []);
-};
-
-export const saveSales = (sales: Sale[]): void => {
-  writeJSON('sales.json', sales);
-};
-
-export const addSales = (newSales: Sale[]): void => {
-  const sales = getSales();
-  sales.push(...newSales);
-  saveSales(sales);
-};
-
-// Cost Price History
-export const addCostPriceHistory = (productId: string, price: number, timestamp: string): void => {
-  const products = getProducts();
-  const product = products.find(p => p.id === productId);
-  if (product) {
-    if (!product.costHistory) {
-      product.costHistory = [];
-    }
-    product.costHistory.push({ price, timestamp });
-    product.costPrice = price; // Update current cost price
-    saveProducts(products);
+export const saveProductTransfers = async (transfers: ProductTransfer[]): Promise<void> => {
+  for (const transfer of transfers) {
+    await prisma.productTransfer.create({
+      data: {
+        id: transfer.id,
+        productId: transfer.productId,
+        fromLocation: transfer.fromLocation,
+        toLocation: transfer.toLocation,
+        fromStoreId: transfer.fromStoreId,
+        toStoreId: transfer.toStoreId,
+        quantity: transfer.quantity,
+        timestamp: new Date(transfer.timestamp),
+      },
+    });
   }
 };
 
+export const addProductTransfer = async (transfer: ProductTransfer): Promise<void> => {
+  await prisma.productTransfer.create({
+    data: {
+      id: transfer.id,
+      productId: transfer.productId,
+      fromLocation: transfer.fromLocation,
+      toLocation: transfer.toLocation,
+      fromStoreId: transfer.fromStoreId,
+      toStoreId: transfer.toStoreId,
+      quantity: transfer.quantity,
+      timestamp: new Date(transfer.timestamp),
+    },
+  });
+};
+
+// Product Additions
+export const getProductAdditions = async (): Promise<ProductAddition[]> => {
+  const additions = await prisma.productAddition.findMany({
+    orderBy: { timestamp: 'desc' },
+  });
+  return additions.map(mapProductAddition);
+};
+
+export const saveProductAdditions = async (additions: ProductAddition[]): Promise<void> => {
+  for (const addition of additions) {
+    await prisma.productAddition.create({
+      data: {
+        id: addition.id,
+        productId: addition.productId,
+        location: addition.location,
+        storeId: addition.storeId,
+        quantity: addition.quantity,
+        timestamp: new Date(addition.timestamp),
+      },
+    });
+  }
+};
+
+export const addProductAddition = async (addition: ProductAddition): Promise<void> => {
+  await prisma.productAddition.create({
+    data: {
+      id: addition.id,
+      productId: addition.productId,
+      location: addition.location,
+      storeId: addition.storeId,
+      quantity: addition.quantity,
+      timestamp: new Date(addition.timestamp),
+    },
+  });
+};
+
+// Sales
+export const getSales = async (): Promise<Sale[]> => {
+  const sales = await prisma.sale.findMany({
+    orderBy: { timestamp: 'desc' },
+  });
+  return sales.map(mapSale);
+};
+
+export const saveSales = async (sales: Sale[]): Promise<void> => {
+  for (const sale of sales) {
+    await prisma.sale.create({
+      data: {
+        id: sale.id,
+        storeId: sale.storeId,
+        productId: sale.productId,
+        productName: sale.productName,
+        quantity: sale.quantity,
+        price: sale.price,
+        total: sale.total,
+        date: sale.date,
+        timestamp: new Date(sale.timestamp),
+      },
+    });
+  }
+};
+
+export const addSales = async (newSales: Sale[]): Promise<void> => {
+  await prisma.sale.createMany({
+    data: newSales.map(sale => ({
+      id: sale.id,
+      storeId: sale.storeId,
+      productId: sale.productId,
+      productName: sale.productName,
+      quantity: sale.quantity,
+      price: sale.price,
+      total: sale.total,
+      date: sale.date,
+      timestamp: new Date(sale.timestamp),
+    })),
+    skipDuplicates: true,
+  });
+};
+
+// Cost Price History
+export const addCostPriceHistory = async (productId: string, price: number, timestamp: string): Promise<void> => {
+  await prisma.$transaction(async (tx) => {
+    // Add price history
+    await tx.priceHistory.create({
+      data: {
+        productId,
+        price,
+        timestamp: new Date(timestamp),
+        type: 'cost',
+      },
+    });
+    
+    // Update product cost price
+    await tx.product.update({
+      where: { id: productId },
+      data: { costPrice: price },
+    });
+  });
+};
+
 // Get cost price for a product at a given time
-export const getCostPriceAtTime = (product: Product, dateTime: string): number => {
+export const getCostPriceAtTime = async (product: Product, dateTime: string): Promise<number> => {
   if (!product.costHistory || product.costHistory.length === 0) {
     return product.costPrice || 0;
   }
@@ -214,78 +422,134 @@ export const getCostPriceAtTime = (product: Product, dateTime: string): number =
   return sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1].price : (product.costPrice || 0);
 };
 
-// Selling Price History (for future use if needed)
-export const addSellingPriceHistory = (productId: string, price: number, timestamp: string): void => {
-  const products = getProducts();
-  const product = products.find(p => p.id === productId);
-  if (product) {
-    if (!product.sellingPriceHistory) {
-      product.sellingPriceHistory = [];
-    }
-    product.sellingPriceHistory.push({ price, timestamp });
-    product.sellingPrice = price;
-    saveProducts(products);
-  }
+// Selling Price History
+export const addSellingPriceHistory = async (productId: string, price: number, timestamp: string): Promise<void> => {
+  await prisma.$transaction(async (tx) => {
+    // Add price history
+    await tx.priceHistory.create({
+      data: {
+        productId,
+        price,
+        timestamp: new Date(timestamp),
+        type: 'selling',
+      },
+    });
+    
+    // Update product selling price
+    await tx.product.update({
+      where: { id: productId },
+      data: { sellingPrice: price },
+    });
+  });
 };
 
 // Legacy function for backward compatibility - now uses cost price
-export const addPriceHistory = (productId: string, price: number, timestamp: string): void => {
-  addCostPriceHistory(productId, price, timestamp);
+export const addPriceHistory = async (productId: string, price: number, timestamp: string): Promise<void> => {
+  await addCostPriceHistory(productId, price, timestamp);
 };
 
 // Legacy function for backward compatibility - now uses cost price
-export const getProductPriceAtTime = (product: Product, dateTime: string): number => {
+export const getProductPriceAtTime = async (product: Product, dateTime: string): Promise<number> => {
   return getCostPriceAtTime(product, dateTime);
 };
 
 // Undetected Products
-export const getUndetectedProducts = (): UndetectedProduct[] => {
-  return readJSON<UndetectedProduct[]>('undetectedProducts.json', []);
+export const getUndetectedProducts = async (): Promise<UndetectedProduct[]> => {
+  const undetected = await prisma.undetectedProduct.findMany({
+    orderBy: { timestamp: 'desc' },
+  });
+  return undetected.map(mapUndetectedProduct);
 };
 
-export const saveUndetectedProducts = (undetected: UndetectedProduct[]): void => {
-  writeJSON('undetectedProducts.json', undetected);
+export const saveUndetectedProducts = async (undetected: UndetectedProduct[]): Promise<void> => {
+  for (const item of undetected) {
+    await prisma.undetectedProduct.create({
+      data: {
+        id: item.id,
+        productName: item.productName,
+        storeId: item.storeId,
+        storeName: item.storeName,
+        rowNumber: item.rowNumber,
+        timestamp: new Date(item.timestamp),
+      },
+    });
+  }
 };
 
-export const addUndetectedProduct = (undetected: UndetectedProduct): void => {
-  const undetectedProducts = getUndetectedProducts();
-  undetectedProducts.push(undetected);
-  saveUndetectedProducts(undetectedProducts);
+export const addUndetectedProduct = async (undetected: UndetectedProduct): Promise<void> => {
+  await prisma.undetectedProduct.create({
+    data: {
+      id: undetected.id,
+      productName: undetected.productName,
+      storeId: undetected.storeId,
+      storeName: undetected.storeName,
+      rowNumber: undetected.rowNumber,
+      timestamp: new Date(undetected.timestamp),
+    },
+  });
 };
 
 // Sales Upload History
-export const getSalesUploadHistory = (): SalesUploadHistory[] => {
-  return readJSON<SalesUploadHistory[]>('salesUploadHistory.json', []);
+export const getSalesUploadHistory = async (): Promise<SalesUploadHistory[]> => {
+  const history = await prisma.salesUploadHistory.findMany({
+    orderBy: { timestamp: 'desc' },
+  });
+  return history.map(mapSalesUploadHistory);
 };
 
-export const saveSalesUploadHistory = (history: SalesUploadHistory[]): void => {
-  writeJSON('salesUploadHistory.json', history);
+export const saveSalesUploadHistory = async (history: SalesUploadHistory[]): Promise<void> => {
+  for (const item of history) {
+    await prisma.salesUploadHistory.create({
+      data: {
+        id: item.id,
+        storeId: item.storeId,
+        storeName: item.storeName,
+        fileName: item.fileName,
+        fileType: item.fileType,
+        imported: item.imported,
+        skipped: item.skipped,
+        totalRows: item.totalRows,
+        errors: item.errors || [],
+        timestamp: new Date(item.timestamp),
+      },
+    });
+  }
 };
 
-export const addSalesUploadHistory = (history: SalesUploadHistory): void => {
-  const histories = getSalesUploadHistory();
-  histories.push(history);
-  saveSalesUploadHistory(histories);
+export const addSalesUploadHistory = async (history: SalesUploadHistory): Promise<void> => {
+  await prisma.salesUploadHistory.create({
+    data: {
+      id: history.id,
+      storeId: history.storeId,
+      storeName: history.storeName,
+      fileName: history.fileName,
+      fileType: history.fileType,
+      imported: history.imported,
+      skipped: history.skipped,
+      totalRows: history.totalRows,
+      errors: history.errors || [],
+      timestamp: new Date(history.timestamp),
+    },
+  });
 };
 
-export const deleteSalesUploadHistory = (id: string): void => {
-  const histories = getSalesUploadHistory();
-  const filtered = histories.filter(h => h.id !== id);
-  saveSalesUploadHistory(filtered);
+export const deleteSalesUploadHistory = async (id: string): Promise<void> => {
+  await prisma.salesUploadHistory.delete({
+    where: { id },
+  });
 };
 
 // Helper function to calculate stock at a specific date
-// This calculates stock by reverse-engineering from current stock
-export const getStockAtDate = (
+export const getStockAtDate = async (
   productId: string,
   location: 'gudang' | 'toko',
   storeId: string | undefined,
   targetDate: string
-): number => {
-  const locations = getProductLocations();
-  const additions = getProductAdditions();
-  const transfers = getProductTransfers();
-  const sales = getSales();
+): Promise<number> => {
+  const locations = await getProductLocations();
+  const additions = await getProductAdditions();
+  const transfers = await getProductTransfers();
+  const sales = await getSales();
 
   // Get current stock
   const currentLocation = locations.find(
@@ -349,4 +613,3 @@ export const getStockAtDate = (
 
   return Math.max(0, stock);
 };
-

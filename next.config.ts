@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   outputFileTracingRoot: path.join(__dirname),
+  output: 'standalone', // For Docker deployment
 };
 
 export default nextConfig;

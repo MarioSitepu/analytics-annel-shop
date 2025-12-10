@@ -7,10 +7,10 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const sales = getSales();
-    const products = getProducts();
-    const locations = getProductLocations();
-    const stores = getStores();
+    const sales = await getSales();
+    const products = await getProducts();
+    const locations = await getProductLocations();
+    const stores = await getStores();
 
     const product = products.find(p => p.id === id);
     if (!product) {
@@ -39,23 +39,25 @@ export async function GET(
     const totalSales = productSales.reduce((sum, sale) => sum + sale.total, 0);
     const totalQuantitySold = productSales.reduce((sum, sale) => sum + sale.quantity, 0);
     
-    const totalProfit = productSales.reduce((sum, sale) => {
-      const costPrice = getCostPriceAtTime(product, sale.timestamp);
-      const totalCost = costPrice * sale.quantity;
-      return sum + (sale.total - totalCost);
-    }, 0);
+    const totalProfit = await Promise.all(
+      productSales.map(async (sale) => {
+        const costPrice = await getCostPriceAtTime(product, sale.timestamp);
+        const totalCost = costPrice * sale.quantity;
+        return sale.total - totalCost;
+      })
+    ).then(results => results.reduce((sum, profit) => sum + profit, 0));
 
     // Sales by date
     const salesByDateMap = new Map<string, { quantity: number; revenue: number; profit: number }>();
-    productSales.forEach(sale => {
+    for (const sale of productSales) {
       const existing = salesByDateMap.get(sale.date) || { quantity: 0, revenue: 0, profit: 0 };
-      const costPrice = getCostPriceAtTime(product, sale.timestamp);
+      const costPrice = await getCostPriceAtTime(product, sale.timestamp);
       const totalCost = costPrice * sale.quantity;
       existing.quantity += sale.quantity;
       existing.revenue += sale.total;
       existing.profit += (sale.total - totalCost);
       salesByDateMap.set(sale.date, existing);
-    });
+    }
 
     const salesByDate = Array.from(salesByDateMap.entries())
       .map(([date, data]) => ({ date, ...data }))

@@ -15,12 +15,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Update location quantity
-    const locations = getProductLocations();
+    const locations = await getProductLocations();
     const existingLocation = locations.find(
       l => l.productId === productId && l.location === location && l.storeId === storeId
     );
     const newQuantity = existingLocation ? existingLocation.quantity + quantity : quantity;
-    updateProductLocation(productId, location, storeId, newQuantity);
+    await updateProductLocation(productId, location, storeId, newQuantity);
 
     // Record addition - use custom date if provided (for gudang), otherwise use current time
     let finalTimestamp: string;
@@ -65,11 +65,11 @@ export async function POST(request: NextRequest) {
       timestamp: finalTimestamp,
     };
 
-    addProductAddition(addition);
+    await addProductAddition(addition);
 
     // If product has priceUpdateMode = 'purchase', update cost price when adding stock
     // If costPrice is provided in request, update it
-    const product = getProduct(productId);
+    const product = await getProduct(productId);
     if (product && product.priceUpdateMode === 'purchase' && costPrice && costPrice > 0) {
       // Format timestamp untuk price history: yyyy-mm-dd HH:mm
       const dateForPrice = new Date(finalTimestamp);
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       const hours = dateForPrice.getHours().toString().padStart(2, '0');
       const minutes = dateForPrice.getMinutes().toString().padStart(2, '0');
       const priceTimestamp = `${year}-${month}-${day} ${hours}:${minutes}`;
-      addCostPriceHistory(productId, costPrice, priceTimestamp);
+      await addCostPriceHistory(productId, costPrice, priceTimestamp);
     }
 
     return NextResponse.json({ success: true, data: addition });

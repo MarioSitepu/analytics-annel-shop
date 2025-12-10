@@ -4,7 +4,7 @@ import { Product, PriceHistory } from '@/types';
 
 export async function GET(request: NextRequest) {
   try {
-    const products = getProducts();
+    const products = await getProducts();
     return NextResponse.json({ success: true, data: products });
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to fetch products' }, { status: 500 });
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
-    addProduct(product);
+    await addProduct(product);
     return NextResponse.json({ success: true, data: product });
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to create product' }, { status: 500 });
@@ -52,8 +52,8 @@ export async function PUT(request: NextRequest) {
     if (name) updates.name = name;
     if (sku !== undefined) updates.sku = sku;
 
-    updateProduct(id, updates);
-    const updatedProduct = getProduct(id);
+    await updateProduct(id, updates);
+    const updatedProduct = await getProduct(id);
     return NextResponse.json({ success: true, data: updatedProduct });
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to update product' }, { status: 500 });

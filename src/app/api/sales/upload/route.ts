@@ -14,8 +14,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'File and store ID are required' }, { status: 400 });
     }
 
-    const products = getProducts();
-    const stores = getStores();
+    const products = await getProducts();
+    const stores = await getStores();
     const store = stores.find(s => s.id === storeId);
 
     if (!store) {
@@ -57,7 +57,8 @@ export async function POST(request: NextRequest) {
       rows = parseResult.data as any[];
     }
 
-    rows.forEach((row: any, index: number) => {
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
       try {
         // Map columns according to requirements:
         // No. Pesanan = Id Produk (order ID, for reference)
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
 
         if (!namaVariasi || !jumlah) {
           errors.push(`Baris ${index + 2}: Nama produk atau jumlah tidak boleh kosong`);
-          return;
+          continue;
         }
 
         // Find product by name (Nama Variasi)
@@ -96,9 +97,9 @@ export async function POST(request: NextRequest) {
             rowNumber: index + 2,
             timestamp: new Date().toISOString(),
           };
-          addUndetectedProduct(undetected);
+          await addUndetectedProduct(undetected);
           
-          return;
+          continue;
         }
 
         // Parse waktu pembayaran
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         errors.push(`Baris ${index + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-    });
+    }
 
     // Urutkan sales berdasarkan tanggal (ascending) untuk mempertimbangkan timeline
     sales.sort((a, b) => {
@@ -195,9 +196,9 @@ export async function POST(request: NextRequest) {
 
     // Validasi dan update stok dengan mempertimbangkan timeline
     const validatedSales: Sale[] = [];
-    const additions = getProductAdditions();
-    const transfers = getProductTransfers();
-    const existingSales = getSales();
+    const additions = await getProductAdditions();
+    const transfers = await getProductTransfers();
+    const existingSales = await getSales();
     
     // Group by product+store untuk tracking stok
     const stockTracker: Map<string, number> = new Map();
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest) {
         if (firstSaleForProduct) {
           const firstSaleDate = firstSaleForProduct.date;
           // Hitung stok pada tanggal pertama dengan mempertimbangkan semua perubahan sebelum tanggal tersebut
-          let initialStock = getStockAtDate(sale.productId, 'toko', sale.storeId, firstSaleDate);
+          let initialStock = await getStockAtDate(sale.productId, 'toko', sale.storeId, firstSaleDate);
           
           // Kurangi penjualan yang sudah ada di database sebelum tanggal pertama
           const existingSalesBefore = existingSales.filter(
@@ -230,7 +231,7 @@ export async function POST(request: NextRequest) {
           
           stockTracker.set(key, initialStock);
         } else {
-          stockTracker.set(key, getStockAtDate(sale.productId, 'toko', sale.storeId, sale.date));
+          stockTracker.set(key, await getStockAtDate(sale.productId, 'toko', sale.storeId, sale.date));
         }
       }
 
@@ -296,14 +297,14 @@ export async function POST(request: NextRequest) {
       stockTracker.set(key, currentStock);
       
       // Update location dengan stok terakhir
-      updateProductLocation(sale.productId, 'toko', sale.storeId, currentStock);
+      await updateProductLocation(sale.productId, 'toko', sale.storeId, currentStock);
       
       validatedSales.push(sale);
     }
     
     // Simpan sales setelah stok diupdate
     if (validatedSales.length > 0) {
-      addSales(validatedSales);
+      await addSales(validatedSales);
     }
 
     // Simpan history upload
@@ -319,7 +320,7 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
       timestamp: new Date().toISOString(),
     };
-    addSalesUploadHistory(uploadHistory);
+    await addSalesUploadHistory(uploadHistory);
 
     return NextResponse.json({
       success: true,

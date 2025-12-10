@@ -4,11 +4,20 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "dev:clean": "powershell -ExecutionPolicy Bypass -File scripts/clean-dev.ps1",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "clean": "Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:setup": "prisma generate && prisma migrate dev --name init",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@prisma/client": "^5.20.0",
     "date-fns": "^3.3.1",
     "lucide-react": "^0.344.0",
     "next": "16.0.8",
@@ -21,12 +30,14 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/papaparse": "^5.5.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/xlsx": "^0.0.35",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.8",
+    "prisma": "^5.20.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

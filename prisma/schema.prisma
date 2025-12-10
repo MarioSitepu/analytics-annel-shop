@@ -1,0 +1,158 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id              String   @id @default(uuid())
+  name            String
+  sku             String?
+  costPrice       Float    @default(0)
+  sellingPrice    Float?
+  priceUpdateMode String?  @default("date") // 'date' | 'purchase'
+  createdAt       DateTime @default(now())
+  
+  priceHistory PriceHistory[]
+  locations    ProductLocation[]
+  transfers    ProductTransfer[]
+  additions    ProductAddition[]
+  sales        Sale[]
+  
+  @@map("products")
+}
+
+model PriceHistory {
+  id        String   @id @default(uuid())
+  productId String
+  price     Float
+  timestamp DateTime
+  type      String   @default("cost") // 'cost' | 'selling'
+  
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  @@index([productId, timestamp])
+  @@index([productId, type])
+  @@map("price_history")
+}
+
+model Store {
+  id        String   @id @default(uuid())
+  name      String
+  type      String   // 'offline' | 'online'
+  address   String?
+  createdAt DateTime @default(now())
+  
+  locations        ProductLocation[]
+  transfersFrom    ProductTransfer[] @relation("TransferFromStore")
+  transfersTo      ProductTransfer[] @relation("TransferToStore")
+  additions        ProductAddition[]
+  sales            Sale[]
+  uploadHistory    SalesUploadHistory[]
+  
+  @@map("stores")
+}
+
+model ProductLocation {
+  id        String   @id @default(uuid())
+  productId String
+  location  String   // 'gudang' | 'toko'
+  quantity  Int      @default(0)
+  storeId   String?
+  
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store   Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  @@unique([productId, location, storeId], name: "productId_location_storeId")
+  @@index([productId])
+  @@map("product_locations")
+}
+
+model ProductTransfer {
+  id           String   @id @default(uuid())
+  productId    String
+  fromLocation String   // 'gudang' | 'toko'
+  toLocation   String   // 'gudang' | 'toko'
+  fromStoreId  String?
+  toStoreId    String?
+  quantity     Int
+  timestamp    DateTime @default(now())
+  
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  fromStore Store? @relation("TransferFromStore", fields: [fromStoreId], references: [id], onDelete: SetNull)
+  toStore   Store? @relation("TransferToStore", fields: [toStoreId], references: [id], onDelete: SetNull)
+  
+  @@index([productId, timestamp])
+  @@map("product_transfers")
+}
+
+model ProductAddition {
+  id        String   @id @default(uuid())
+  productId String
+  location  String   // 'gudang' | 'toko'
+  storeId   String?
+  quantity  Int
+  timestamp DateTime @default(now())
+  
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store   Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  @@index([productId, timestamp])
+  @@map("product_additions")
+}
+
+model Sale {
+  id          String   @id @default(uuid())
+  storeId     String
+  productId   String
+  productName String
+  quantity    Int
+  price       Float
+  total       Float
+  date        String   // Format: "2025-12-05"
+  timestamp   DateTime @default(now())
+  
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  @@index([storeId, date])
+  @@index([productId, date])
+  @@index([timestamp])
+  @@map("sales")
+}
+
+model UndetectedProduct {
+  id          String   @id @default(uuid())
+  productName String
+  storeId     String
+  storeName   String
+  rowNumber   Int
+  timestamp   DateTime @default(now())
+  
+  @@map("undetected_products")
+}
+
+model SalesUploadHistory {
+  id        String   @id @default(uuid())
+  storeId   String
+  storeName String
+  fileName  String
+  fileType  String
+  imported  Int      @default(0)
+  skipped   Int      @default(0)
+  totalRows Int      @default(0)
+  errors    String[] // Array of error messages
+  timestamp DateTime @default(now())
+  
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  @@index([storeId, timestamp])
+  @@map("sales_upload_history")
+}
+

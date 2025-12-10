@@ -3,10 +3,10 @@ import { getProductAdditions, getUndetectedProducts, getProducts, getStores } fr
 
 export async function GET(request: NextRequest) {
   try {
-    const additions = getProductAdditions();
-    const undetected = getUndetectedProducts();
-    const products = getProducts();
-    const stores = getStores();
+    const additions = await getProductAdditions();
+    const undetected = await getUndetectedProducts();
+    const products = await getProducts();
+    const stores = await getStores();
 
     // Sort by timestamp descending (newest first)
     const sortedAdditions = [...additions].sort((a, b) => 

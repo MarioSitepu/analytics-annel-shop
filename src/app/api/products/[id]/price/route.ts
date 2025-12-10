@@ -13,7 +13,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Product ID and price are required' }, { status: 400 });
     }
 
-    const product = getProduct(id);
+    const product = await getProduct(id);
     if (!product) {
       return NextResponse.json({ success: false, error: 'Product not found' }, { status: 404 });
     }
@@ -26,11 +26,11 @@ export async function POST(
 
     // Add cost price history (harga modal)
     const priceTimestamp = timestamp || new Date().toISOString().slice(0, 16).replace('T', ' ');
-    addCostPriceHistory(id, price, priceTimestamp);
+    await addCostPriceHistory(id, price, priceTimestamp);
 
     // Update product's price update mode
     if (updateMode) {
-      updateProduct(id, { priceUpdateMode: updateMode });
+      await updateProduct(id, { priceUpdateMode: updateMode });
     }
 
     return NextResponse.json({ success: true, message: 'Price updated successfully' });

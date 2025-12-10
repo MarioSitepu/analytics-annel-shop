@@ -43,6 +43,8 @@ Sistem web lengkap untuk analisis dan manajemen penjualan toko offline dan onlin
 - **Next.js 16** - Framework React dengan App Router
 - **TypeScript** - Type safety
 - **Tailwind CSS** - Styling
+- **PostgreSQL** - Database
+- **Prisma** - ORM untuk database
 - **Recharts** - Grafik dan visualisasi data
 - **PapaParse** - Parser CSV
 - **date-fns** - Manipulasi tanggal
@@ -55,22 +57,74 @@ Sistem web lengkap untuk analisis dan manajemen penjualan toko offline dan onlin
 npm install
 ```
 
-2. Jalankan development server:
+2. Setup database (Pilih salah satu):
+
+**Opsi 1: Supabase (Recommended untuk Production)**
+```bash
+# Lihat panduan lengkap di SETUP_SUPABASE.md
+# 1. Buat project di https://supabase.com
+# 2. Dapatkan connection string dari Settings > Database
+# 3. Buat file .env dan set DATABASE_URL
+```
+
+**Opsi 2: Docker (Development)**
+```bash
+docker-compose up -d postgres
+```
+
+**Opsi 3: PostgreSQL Lokal**
+```bash
+# Install PostgreSQL dan buat database
+# Update DATABASE_URL di .env
+```
+
+3. Setup environment variables:
+```bash
+# Buat file .env di root project
+# Tambahkan DATABASE_URL (dari Supabase atau setup lokal)
+```
+
+**Contoh .env untuk Supabase:**
+```env
+DATABASE_URL="postgresql://postgres:[PASSWORD]@db.xxxxx.supabase.co:5432/postgres?pgbouncer=true&connection_limit=1"
+```
+
+4. Jalankan migrasi database:
+```bash
+# Generate Prisma Client
+npm run db:generate
+
+# Jalankan migrasi
+npm run db:migrate
+
+# Atau push schema langsung (untuk development)
+npm run db:push
+```
+
+5. Jalankan development server:
 ```bash
 npm run dev
 ```
 
-3. Buka browser di `http://localhost:3000`
+6. Buka browser di `http://localhost:3000`
 
-## Struktur Data
+## Database
 
-Data disimpan dalam folder `data/` sebagai file JSON:
-- `products.json` - Data produk
-- `stores.json` - Data toko
-- `productLocations.json` - Lokasi dan stok produk
-- `productTransfers.json` - History transfer
-- `productAdditions.json` - History penambahan stok
-- `sales.json` - Data penjualan
+Aplikasi menggunakan **PostgreSQL** sebagai database. Database akan dibuat otomatis saat menjalankan migrasi Prisma.
+
+### Setup Database
+
+**Recommended: Supabase** (Gratis untuk development)
+- Lihat [SETUP_SUPABASE.md](./SETUP_SUPABASE.md) untuk quick setup
+- Lihat [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) untuk panduan lengkap
+
+**Alternatif:**
+- **Docker**: `docker-compose up -d postgres`
+- **PostgreSQL Lokal**: Install dan setup manual
+- **Vercel Postgres**: Untuk deployment di Vercel
+- **Railway/Render**: Platform cloud lainnya
+
+Lihat [DEPLOYMENT.md](./DEPLOYMENT.md) untuk panduan lengkap setup database dan deployment.
 
 ## Format CSV Penjualan
 
@@ -117,4 +171,8 @@ Produk B,3,75000,2025-12-05,15:30
 
 - Sistem otomatis mendeteksi tanggal pembelian dari CSV dan menggunakan harga yang berlaku pada waktu tersebut
 - Perubahan harga disimpan dengan timestamp dan akan berlaku mulai waktu tersebut
-- Data disimpan dalam file JSON lokal (dapat diganti dengan database untuk production)
+- Data disimpan dalam database PostgreSQL (untuk production-ready deployment)
+
+## Deployment
+
+Lihat [DEPLOYMENT.md](./DEPLOYMENT.md) untuk panduan lengkap deployment aplikasi ke berbagai platform.

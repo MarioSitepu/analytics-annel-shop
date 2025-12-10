@@ -11,9 +11,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Date parameter is required' }, { status: 400 });
     }
 
-    const sales = getSales();
-    const products = getProducts();
-    const stores = getStores();
+    const sales = await getSales();
+    const products = await getProducts();
+    const stores = await getStores();
 
     // Filter sales by date
     const filteredSales = sales.filter(sale => sale.date === date);
@@ -22,17 +22,19 @@ export async function GET(request: NextRequest) {
     const totalSales = filteredSales.reduce((sum, sale) => sum + sale.total, 0);
     
     // Calculate profit: Revenue (selling price) - Cost (cost price)
-    const totalProfit = filteredSales.reduce((sum, sale) => {
-      const product = products.find(p => p.id === sale.productId);
-      if (!product) return sum;
-      
-      // Get cost price at the time of sale
-      const costPrice = getCostPriceAtTime(product, sale.timestamp);
-      const totalCost = costPrice * sale.quantity;
-      
-      // Profit = Revenue (sale.total) - Cost (costPrice * quantity)
-      return sum + (sale.total - totalCost);
-    }, 0);
+    const totalProfit = await Promise.all(
+      filteredSales.map(async (sale) => {
+        const product = products.find(p => p.id === sale.productId);
+        if (!product) return 0;
+        
+        // Get cost price at the time of sale
+        const costPrice = await getCostPriceAtTime(product, sale.timestamp);
+        const totalCost = costPrice * sale.quantity;
+        
+        // Profit = Revenue (sale.total) - Cost (costPrice * quantity)
+        return sale.total - totalCost;
+      })
+    ).then(results => results.reduce((sum, profit) => sum + profit, 0));
 
     // Sales by product
     const salesByProductMap = new Map<string, { quantity: number; revenue: number }>();

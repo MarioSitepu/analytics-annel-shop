@@ -4,7 +4,7 @@ import { Store } from '@/types';
 
 export async function GET(request: NextRequest) {
   try {
-    const stores = getStores();
+    const stores = await getStores();
     return NextResponse.json({ success: true, data: stores });
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to fetch stores' }, { status: 500 });
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if store with same name already exists
-    const stores = getStores();
+    const stores = await getStores();
     const existingStore = stores.find(s => s.name.toLowerCase().trim() === name.toLowerCase().trim());
     if (existingStore) {
       return NextResponse.json({ success: false, error: 'Toko dengan nama ini sudah ada' }, { status: 400 });
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
-    addStore(store);
+    await addStore(store);
     return NextResponse.json({ success: true, data: store });
   } catch (error) {
     console.error('Error creating store:', error);

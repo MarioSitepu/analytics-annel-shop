@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const storeId = searchParams.get('storeId');
     const type = searchParams.get('type'); // 'offline' or 'online'
 
-    const histories = getSalesUploadHistory();
+    const histories = await getSalesUploadHistory();
     
     // Filter by storeId if provided
     let filteredHistories = histories;
@@ -35,7 +35,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'ID is required' }, { status: 400 });
     }
 
-    deleteSalesUploadHistory(id);
+    await deleteSalesUploadHistory(id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -3,7 +3,7 @@ import { getProductLocations, updateProductLocation, saveProductLocations } from
 
 export async function GET(request: NextRequest) {
   try {
-    const locations = getProductLocations();
+    const locations = await getProductLocations();
     return NextResponse.json({ success: true, data: locations });
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to fetch product locations' }, { status: 500 });
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Location must be gudang or toko' }, { status: 400 });
     }
 
-    updateProductLocation(productId, location, storeId, quantity);
+    await updateProductLocation(productId, location, storeId, quantity);
     return NextResponse.json({ success: true, message: 'Product location updated' });
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to update product location' }, { status: 500 });

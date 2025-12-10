@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if source has enough quantity
-    const locations = getProductLocations();
+    const locations = await getProductLocations();
     const sourceLocation = locations.find(
       l => l.productId === productId && l.location === fromLocation && l.storeId === fromStoreId
     );
@@ -20,14 +20,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Update source location
-    updateProductLocation(productId, fromLocation, fromStoreId, sourceLocation.quantity - quantity);
+    await updateProductLocation(productId, fromLocation, fromStoreId, sourceLocation.quantity - quantity);
 
     // Update destination location
     const destLocation = locations.find(
       l => l.productId === productId && l.location === toLocation && l.storeId === toStoreId
     );
     const destQuantity = destLocation ? destLocation.quantity + quantity : quantity;
-    updateProductLocation(productId, toLocation, toStoreId, destQuantity);
+    await updateProductLocation(productId, toLocation, toStoreId, destQuantity);
 
     // Record transfer
     const transfer = {
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     };
 
-    addProductTransfer(transfer);
+    await addProductTransfer(transfer);
 
     return NextResponse.json({ success: true, data: transfer });
   } catch (error) {

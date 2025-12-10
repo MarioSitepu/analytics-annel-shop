@@ -10,8 +10,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Date parameter is required' }, { status: 400 });
     }
 
-    const transfers = getProductTransfers();
-    const additions = getProductAdditions();
+    const transfers = await getProductTransfers();
+    const additions = await getProductAdditions();
 
     // Filter by date
     const filteredTransfers = transfers.filter(t => {
