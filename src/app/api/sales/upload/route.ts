@@ -538,7 +538,7 @@ export async function POST(request: NextRequest) {
       if (currentStock < totalNeeded) {
         const product = products.find(p => p.id === productId);
         const productName = product?.name || 'Unknown';
-        const rows = productQuantityByRow.get(key) || [];
+        const rows = productQuantityByRow.get(productId) || [];
         
         // Tambahkan error untuk setiap baris yang membutuhkan produk ini
         for (const row of rows) {
